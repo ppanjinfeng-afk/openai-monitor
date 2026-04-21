@@ -1,0 +1,19 @@
+[Unit]
+Description=OpenAI Monitor
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/openai-monitor
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=BIND_HOST=127.0.0.1
+ExecStart=/usr/bin/node /opt/openai-monitor/server.js
+Restart=always
+RestartSec=5
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
+

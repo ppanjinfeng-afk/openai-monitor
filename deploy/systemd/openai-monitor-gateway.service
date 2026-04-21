@@ -1,0 +1,20 @@
+[Unit]
+Description=OpenAI Monitor Maintenance Gateway
+After=network.target openai-monitor.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/openai-monitor
+Environment=NODE_ENV=production
+Environment=PUBLIC_GATEWAY_PORT=3001
+Environment=PUBLIC_GATEWAY_ORIGIN_HOST=127.0.0.1
+Environment=PUBLIC_GATEWAY_ORIGIN_PORT=3000
+ExecStart=/usr/bin/node /opt/openai-monitor/maintenance-gateway.js
+Restart=always
+RestartSec=5
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
+
