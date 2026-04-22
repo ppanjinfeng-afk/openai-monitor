@@ -41,7 +41,10 @@ class CdkTeamWorker {
     const baseUrl = process.env.INTERNAL_BASE_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
     const response = await fetch(`${baseUrl}/api/accounts/auto-invite`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-openai-monitor-internal': '1',
+      },
       body: JSON.stringify({
         email,
         prefer_fresh_workspace: true,

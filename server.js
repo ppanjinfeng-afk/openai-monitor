@@ -73,6 +73,14 @@ function isLoopbackRequest(req) {
   return LOOPBACK_IPS.has(remoteAddress) || remoteAddress.startsWith('::ffff:127.0.0.1');
 }
 
+function isInternalBypassRequest(req) {
+  if (!isLoopbackRequest(req)) {
+    return false;
+  }
+
+  return String(req.get('x-openai-monitor-internal') || '').trim() === '1';
+}
+
 function timingSafeEqualText(left, right) {
   const leftBuffer = Buffer.from(String(left || ''), 'utf8');
   const rightBuffer = Buffer.from(String(right || ''), 'utf8');
@@ -318,7 +326,7 @@ function renderAdminLoginPage({ errorMessage = '', nextPath = '/' } = {}) {
 }
 
 function enforceAdminSessionAuth(req, res, next) {
-  if (req.isPublicHost) {
+  if (req.isPublicHost || isInternalBypassRequest(req)) {
     return next();
   }
 
