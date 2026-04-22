@@ -127,3 +127,39 @@ sudo systemctl status nginx --no-pager
 journalctl -u openai-monitor -n 100 --no-pager
 curl http://127.0.0.1:3000/api/checks/status
 ```
+
+## 13. 让 3000 端口支持账密登录
+
+如果你想从其他电脑直接打开 `http://你的VPSIP:3000` 管理后台：
+
+1. 修改 systemd 配置：
+
+```bash
+sudo nano /etc/systemd/system/openai-monitor.service
+```
+
+把这几行加到 `[Service]` 里：
+
+```ini
+Environment=BIND_HOST=0.0.0.0
+Environment=ADMIN_BASIC_AUTH_ENABLED=true
+Environment=ADMIN_BASIC_AUTH_USER=admin
+Environment=ADMIN_BASIC_AUTH_PASS=change-this-password
+```
+
+2. 重载并重启：
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart openai-monitor
+```
+
+3. 云服务器安全组放通：
+
+- TCP `3000`
+
+4. 然后在其他电脑浏览器打开：
+
+- `http://你的VPSIP:3000`
+
+浏览器会先弹出用户名/密码输入框，验证通过后才能进入后台。

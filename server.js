@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const crypto = require('crypto');
 const db = require('./db');
 
 const app = express();
@@ -13,6 +14,7 @@ const PUBLIC_HOSTS = new Set(
     .filter(Boolean)
 );
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+const LOOPBACK_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const publicRateBuckets = new Map();
 const maintenancePagePath = path.join(__dirname, 'public', 'maintenance.html');
 const getSettingValueStmt = db.prepare('SELECT value FROM settings WHERE key = ?');
@@ -38,6 +40,100 @@ function isAllowedCorsOrigin(origin) {
 function getSettingValue(key, fallback = '') {
   const row = getSettingValueStmt.get(key);
   return row ? row.value : fallback;
+}
+
+function parseBoolean(value, fallback = false) {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+
+  return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
+}
+
+function getAdminBasicAuthConfig() {
+  const user = String(process.env.ADMIN_BASIC_AUTH_USER || getSettingValue('admin_basic_auth_user', '')).trim();
+  const pass = String(process.env.ADMIN_BASIC_AUTH_PASS || getSettingValue('admin_basic_auth_pass', '')).trim();
+  const enabled = parseBoolean(
+    process.env.ADMIN_BASIC_AUTH_ENABLED ?? getSettingValue('admin_basic_auth_enabled', user && pass ? 'true' : 'false'),
+    Boolean(user && pass)
+  );
+
+  return {
+    enabled,
+    user,
+    pass,
+  };
+}
+
+function isLoopbackRequest(req) {
+  const remoteAddress = String(req.socket?.remoteAddress || req.ip || '').trim().toLowerCase();
+  return LOOPBACK_IPS.has(remoteAddress) || remoteAddress.startsWith('::ffff:127.0.0.1');
+}
+
+function parseBasicAuthHeader(header = '') {
+  const raw = String(header || '').trim();
+  if (!raw.toLowerCase().startsWith('basic ')) {
+    return null;
+  }
+
+  try {
+    const decoded = Buffer.from(raw.slice(6).trim(), 'base64').toString('utf8');
+    const splitIndex = decoded.indexOf(':');
+    if (splitIndex < 0) {
+      return null;
+    }
+
+    return {
+      user: decoded.slice(0, splitIndex),
+      pass: decoded.slice(splitIndex + 1),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function timingSafeEqualText(left, right) {
+  const leftBuffer = Buffer.from(String(left || ''), 'utf8');
+  const rightBuffer = Buffer.from(String(right || ''), 'utf8');
+
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function isAdminBasicAuthAuthorized(req, config) {
+  const credentials = parseBasicAuthHeader(req.get('authorization') || '');
+  if (!credentials) {
+    return false;
+  }
+
+  return timingSafeEqualText(credentials.user, config.user)
+    && timingSafeEqualText(credentials.pass, config.pass);
+}
+
+function enforceAdminBasicAuth(req, res, next) {
+  if (req.isPublicHost || isLoopbackRequest(req)) {
+    return next();
+  }
+
+  const config = getAdminBasicAuthConfig();
+  if (!config.enabled || !config.user || !config.pass) {
+    return next();
+  }
+
+  if (isAdminBasicAuthAuthorized(req, config)) {
+    return next();
+  }
+
+  res.setHeader('WWW-Authenticate', 'Basic realm="OpenAI Monitor Admin", charset="UTF-8"');
+
+  if (req.path.startsWith('/api/')) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  return res.status(401).send('Authentication required');
 }
 
 function isPublicTunnelEnabled() {
@@ -227,12 +323,13 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use((req, res, next) => {
-  req.isPublicHost = isPublicHost(req);
+  req.isPublicHost = isPublicHost(req) && isLoopbackRequest(req);
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'same-origin');
   next();
 });
+app.use(enforceAdminBasicAuth);
 app.use(enforcePublicRateLimit);
 app.use((req, res, next) => {
   if (!req.isPublicHost) {
