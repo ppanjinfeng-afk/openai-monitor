@@ -114,7 +114,7 @@ function isAdminBasicAuthAuthorized(req, config) {
 }
 
 function enforceAdminBasicAuth(req, res, next) {
-  if (req.isPublicHost || isLoopbackRequest(req)) {
+  if (req.isPublicHost) {
     return next();
   }
 
