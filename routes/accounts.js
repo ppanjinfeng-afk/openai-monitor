@@ -1623,6 +1623,7 @@ router.get('/stats', (req, res) => {
   const mainStats = db.prepare(`
     SELECT
       COUNT(*) AS total,
+      SUM(CASE WHEN ${activeQuotaCondition} THEN 1 ELSE 0 END) AS currentTotal,
       SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active,
       SUM(CASE WHEN status = 'banned' THEN 1 ELSE 0 END) AS banned,
       SUM(CASE WHEN status = 'invalid_credentials' THEN 1 ELSE 0 END) AS invalid,
@@ -1655,6 +1656,7 @@ router.get('/stats', (req, res) => {
 
   res.json({
     total: mainStats.total,
+    currentTotal: mainStats.currentTotal,
     active: mainStats.active,
     banned: mainStats.banned,
     invalid: mainStats.invalid,

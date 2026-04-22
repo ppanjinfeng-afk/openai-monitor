@@ -443,7 +443,7 @@ const App = {
     return this.runSingleFlight('stats', async () => {
       try {
         this.stats = await API.getStats();
-        this.setText('stat-total', this.stats.total);
+        this.setText('stat-total', this.stats.currentTotal ?? this.stats.total);
         this.setText('stat-active', this.stats.active);
         this.setText('stat-banned', this.stats.banned);
         this.setText('stat-invalid', this.stats.invalid || 0);
