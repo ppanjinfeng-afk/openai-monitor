@@ -225,6 +225,24 @@ function shouldAutoInviteLock({ inviteTotal, occupiedSeats, pendingInvites }) {
     || reservedSeats >= WORKSPACE_MEMBER_LIMIT;
 }
 
+function isWorkspaceGoneMessage(message) {
+  const normalized = String(message || '').trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return (
+    normalized.includes('deactivated_workspace')
+    || normalized.includes('workspace_not_found')
+    || normalized.includes('no_workspace_found')
+    || normalized.includes('workspace not found')
+    || normalized.includes('no workspace found')
+    || normalized.includes('deactivated workspace')
+    || (normalized.includes('http 404') && normalized.includes('workspace'))
+    || (normalized.includes('http 402') && normalized.includes('workspace'))
+  );
+}
+
 function upsertWorkspace(account, workspace, snapshot, syncMessage = '') {
   const inviteTotal = Number(account.invite_total || 0);
   const occupiedSeats = Number(snapshot.occupiedSeats || 0);
@@ -454,6 +472,14 @@ function removeMissingWorkspaceSnapshots(accountId, workspaceIds = []) {
     db.prepare(`DELETE FROM workspace_members WHERE account_id = ?`).run(accountId);
     db.prepare(`DELETE FROM workspace_pending_invites WHERE account_id = ?`).run(accountId);
     db.prepare(`DELETE FROM workspaces WHERE account_id = ?`).run(accountId);
+    db.prepare(`
+      UPDATE accounts
+      SET quota_workspace_id = '',
+          quota_workspace_name = '',
+          updated_at = datetime('now')
+      WHERE id = ?
+        AND COALESCE(quota_workspace_id, '') != ''
+    `).run(accountId);
     return;
   }
 
@@ -474,6 +500,53 @@ function removeMissingWorkspaceSnapshots(accountId, workspaceIds = []) {
     WHERE account_id = ?
       AND workspace_id NOT IN (${placeholders})
   `).run(...params);
+
+  db.prepare(`
+    UPDATE accounts
+    SET quota_workspace_id = '',
+        quota_workspace_name = '',
+        updated_at = datetime('now')
+    WHERE id = ?
+      AND COALESCE(quota_workspace_id, '') != ''
+      AND COALESCE(quota_workspace_id, '') NOT IN (${placeholders})
+  `).run(...params);
+}
+
+function removeWorkspaceSnapshot(accountId, workspaceId) {
+  if (!accountId || !workspaceId) {
+    return;
+  }
+
+  const transact = db.transaction(() => {
+    db.prepare(`
+      DELETE FROM workspace_members
+      WHERE account_id = ?
+        AND workspace_id = ?
+    `).run(accountId, workspaceId);
+
+    db.prepare(`
+      DELETE FROM workspace_pending_invites
+      WHERE account_id = ?
+        AND workspace_id = ?
+    `).run(accountId, workspaceId);
+
+    db.prepare(`
+      DELETE FROM workspaces
+      WHERE account_id = ?
+        AND workspace_id = ?
+    `).run(accountId, workspaceId);
+
+    db.prepare(`
+      UPDATE accounts
+      SET quota_workspace_id = '',
+          quota_workspace_name = '',
+          updated_at = datetime('now')
+      WHERE id = ?
+        AND COALESCE(quota_workspace_id, '') = ?
+    `).run(accountId, workspaceId);
+  });
+
+  transact();
 }
 
 function reconcileInviteRecords(account, workspaceId, snapshot) {
@@ -568,6 +641,21 @@ async function syncAccountWorkspacesWithPage(page, account) {
   for (const workspace of discovery.workspaces || []) {
     const snapshot = await fetchWorkspaceSnapshot(page, account, workspace);
     if (!snapshot.success) {
+      if (isWorkspaceGoneMessage(snapshot.message)) {
+        removeWorkspaceSnapshot(account.id, workspace.id);
+
+        results.push({
+          success: true,
+          removed: true,
+          accountId: account.id,
+          accountEmail: account.email,
+          workspaceId: workspace.id,
+          workspaceName: workspace.name || workspace.id,
+          message: snapshot.message,
+        });
+        continue;
+      }
+
       upsertWorkspaceError(account, workspace, snapshot.message);
 
       results.push({
@@ -692,6 +780,30 @@ async function syncWorkspaceByRowId(rowId) {
   };
 }
 
+async function syncWorkspaceByRowIdSafe(rowId) {
+  const result = await syncWorkspaceByRowId(rowId);
+  if (result?.success) {
+    return result;
+  }
+
+  const workspaceRow = db.prepare(`
+    SELECT w.*, a.email AS account_email
+    FROM workspaces w
+    JOIN accounts a ON a.id = w.account_id
+    WHERE w.id = ?
+  `).get(rowId);
+
+  if (workspaceRow) {
+    return result;
+  }
+
+  return {
+    success: true,
+    removed: true,
+    message: '工作区已失效，已从本地快照移除',
+  };
+}
+
 function summarizeWorkspaceSync(results = []) {
   const accountTotal = results.length;
   const syncedAccounts = results.filter(item => item.success).length;
@@ -779,7 +891,7 @@ function exportWorkspaceCsv(rowId) {
 module.exports = {
   syncAllWorkspaceSnapshots,
   syncAccountWorkspaces,
-  syncWorkspaceByRowId,
+  syncWorkspaceByRowId: syncWorkspaceByRowIdSafe,
   summarizeWorkspaceSync,
   exportWorkspaceCsv,
 };
