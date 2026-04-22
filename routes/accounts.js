@@ -1419,9 +1419,29 @@ function formatInviteFailure(attempts) {
 
 function shouldFallbackInviteResult(result) {
   const code = String(result?.code || '').trim().toLowerCase();
+  const message = String(result?.message || '').trim().toLowerCase();
   return code === 'invite_not_materialized'
     || code === 'capacity_full'
-    || code === 'workspace_lookup_failed';
+    || code === 'workspace_lookup_failed'
+    || code === 'invite_lookup_failed'
+    || code === 'user_lookup_failed'
+    || (code === 'create_failed' && (
+      message.includes('deactivated_workspace')
+      || message.includes('workspace not found')
+      || message.includes('invalidated oauth token')
+      || message.includes('http 401')
+      || message.includes('http 402')
+      || message.includes('http 403')
+      || message.includes('http 404')
+    ))
+    || message.includes('deactivated_workspace')
+    || message.includes('workspace not found')
+    || message.includes('invalidated oauth token')
+    || message.includes('encountered invalidated oauth token')
+    || message.includes('http 401')
+    || message.includes('http 402')
+    || message.includes('http 403')
+    || message.includes('http 404');
 }
 
 function shouldSyncQuotaAfterInvite(account, result, requestedWorkspaceId = '') {
@@ -1520,9 +1540,6 @@ async function sendInviteWithWorkspaceCandidates(targetEmail, workspaceCandidate
       workspaceCandidate: candidate,
     };
 
-    if (!shouldFallbackInviteResult(result)) {
-      break;
-    }
   }
 
   if (lastFailure) {
