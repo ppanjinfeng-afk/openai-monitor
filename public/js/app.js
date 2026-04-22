@@ -3404,7 +3404,7 @@ const App = {
             <button class="member-inline-btn" onclick="App.traceCdk(${Components.jsString(task.id || '')})">追踪</button>
           </div>
         </td>
-        <td><code>${Components.escapeHtml(Components.shortId(task.cdk_code || ''))}</code></td>
+        <td><code title="${Components.escapeHtml(task.cdk_code || '')}">${Components.escapeHtml(task.cdk_code || '-')}</code></td>
         <td>${Components.escapeHtml(task.account_email || '-')}</td>
         <td>
           <div class="stack-col-sm">
