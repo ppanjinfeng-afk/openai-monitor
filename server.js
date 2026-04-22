@@ -16,6 +16,9 @@ const PUBLIC_HOSTS = new Set(
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const LOOPBACK_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const publicRateBuckets = new Map();
+const adminSessions = new Map();
+const ADMIN_SESSION_COOKIE = 'openai_monitor_admin_session';
+const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const maintenancePagePath = path.join(__dirname, 'public', 'maintenance.html');
 const getSettingValueStmt = db.prepare('SELECT value FROM settings WHERE key = ?');
 
@@ -70,28 +73,6 @@ function isLoopbackRequest(req) {
   return LOOPBACK_IPS.has(remoteAddress) || remoteAddress.startsWith('::ffff:127.0.0.1');
 }
 
-function parseBasicAuthHeader(header = '') {
-  const raw = String(header || '').trim();
-  if (!raw.toLowerCase().startsWith('basic ')) {
-    return null;
-  }
-
-  try {
-    const decoded = Buffer.from(raw.slice(6).trim(), 'base64').toString('utf8');
-    const splitIndex = decoded.indexOf(':');
-    if (splitIndex < 0) {
-      return null;
-    }
-
-    return {
-      user: decoded.slice(0, splitIndex),
-      pass: decoded.slice(splitIndex + 1),
-    };
-  } catch {
-    return null;
-  }
-}
-
 function timingSafeEqualText(left, right) {
   const leftBuffer = Buffer.from(String(left || ''), 'utf8');
   const rightBuffer = Buffer.from(String(right || ''), 'utf8');
@@ -103,17 +84,240 @@ function timingSafeEqualText(left, right) {
   return crypto.timingSafeEqual(leftBuffer, rightBuffer);
 }
 
-function isAdminBasicAuthAuthorized(req, config) {
-  const credentials = parseBasicAuthHeader(req.get('authorization') || '');
-  if (!credentials) {
+function escapeHtml(value = '') {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function normalizeAdminNextPath(value = '/') {
+  const raw = String(value || '/').trim();
+  if (!raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/admin-login')) {
+    return '/';
+  }
+
+  return raw || '/';
+}
+
+function parseCookies(header = '') {
+  return String(header || '')
+    .split(';')
+    .map(part => part.trim())
+    .filter(Boolean)
+    .reduce((accumulator, part) => {
+      const splitIndex = part.indexOf('=');
+      if (splitIndex < 0) {
+        return accumulator;
+      }
+
+      const key = decodeURIComponent(part.slice(0, splitIndex).trim());
+      const value = decodeURIComponent(part.slice(splitIndex + 1).trim());
+      accumulator[key] = value;
+      return accumulator;
+    }, {});
+}
+
+function appendSetCookie(res, value) {
+  const existing = res.getHeader('Set-Cookie');
+  if (!existing) {
+    res.setHeader('Set-Cookie', value);
+    return;
+  }
+
+  if (Array.isArray(existing)) {
+    res.setHeader('Set-Cookie', [...existing, value]);
+    return;
+  }
+
+  res.setHeader('Set-Cookie', [existing, value]);
+}
+
+function getAdminSessionToken(req) {
+  const cookies = parseCookies(req.get('cookie') || '');
+  return String(cookies[ADMIN_SESSION_COOKIE] || '').trim();
+}
+
+function clearExpiredAdminSessions() {
+  const now = Date.now();
+  for (const [token, session] of adminSessions.entries()) {
+    if (!session || session.expiresAt <= now) {
+      adminSessions.delete(token);
+    }
+  }
+}
+
+function hasValidAdminSession(req) {
+  clearExpiredAdminSessions();
+  const token = getAdminSessionToken(req);
+  if (!token) {
     return false;
   }
 
-  return timingSafeEqualText(credentials.user, config.user)
-    && timingSafeEqualText(credentials.pass, config.pass);
+  const session = adminSessions.get(token);
+  if (!session || session.expiresAt <= Date.now()) {
+    adminSessions.delete(token);
+    return false;
+  }
+
+  session.expiresAt = Date.now() + ADMIN_SESSION_TTL_MS;
+  return true;
 }
 
-function enforceAdminBasicAuth(req, res, next) {
+function createAdminSession(username) {
+  clearExpiredAdminSessions();
+  const token = crypto.randomBytes(32).toString('hex');
+  adminSessions.set(token, {
+    username,
+    expiresAt: Date.now() + ADMIN_SESSION_TTL_MS,
+  });
+  return token;
+}
+
+function setAdminSessionCookie(res, token) {
+  appendSetCookie(res, `${ADMIN_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax`);
+}
+
+function clearAdminSessionCookie(res) {
+  appendSetCookie(res, `${ADMIN_SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+}
+
+function renderAdminLoginPage({ errorMessage = '', nextPath = '/' } = {}) {
+  const safeNextPath = escapeHtml(normalizeAdminNextPath(nextPath));
+  const safeErrorMessage = errorMessage ? `<div class="admin-login-error">${escapeHtml(errorMessage)}</div>` : '';
+
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>后台登录</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0b1220;
+      --panel: rgba(15, 23, 42, 0.92);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #4f8cff;
+      --text: #e5eefc;
+      --muted: #9fb0cb;
+      --danger-bg: rgba(239, 68, 68, 0.14);
+      --danger-border: rgba(248, 113, 113, 0.32);
+      --danger-text: #fecaca;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at top, rgba(79, 140, 255, 0.18), transparent 36%),
+        linear-gradient(180deg, #0b1220 0%, #111c33 100%);
+      color: var(--text);
+    }
+
+    .admin-login-card {
+      width: min(100%, 420px);
+      padding: 28px;
+      border-radius: 20px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      box-shadow: 0 28px 60px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(10px);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 30px;
+      line-height: 1.1;
+    }
+
+    p {
+      margin: 0 0 22px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(15, 23, 42, 0.84);
+      color: var(--text);
+      padding: 14px 16px;
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      margin-bottom: 16px;
+    }
+
+    input:focus {
+      border-color: rgba(79, 140, 255, 0.78);
+      box-shadow: 0 0 0 4px rgba(79, 140, 255, 0.16);
+    }
+
+    button {
+      width: 100%;
+      border: none;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #4f8cff, #3f75ff);
+      color: #fff;
+      padding: 14px 16px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .admin-login-error {
+      margin-bottom: 16px;
+      border: 1px solid var(--danger-border);
+      background: var(--danger-bg);
+      color: var(--danger-text);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 14px;
+    }
+
+    .admin-login-hint {
+      margin-top: 16px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <form class="admin-login-card" method="post" action="/admin-login" autocomplete="off">
+    <h1>后台登录</h1>
+    <p>每次新开浏览器访问后台都需要先验证账号密码。</p>
+    ${safeErrorMessage}
+    <input type="hidden" name="next" value="${safeNextPath}">
+    <label for="username">账号</label>
+    <input id="username" name="username" type="text" autocomplete="username" required>
+    <label for="password">密码</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">登录后台</button>
+    <div class="admin-login-hint">关闭浏览器后，会话会失效，需要重新登录。</div>
+  </form>
+</body>
+</html>`;
+}
+
+function enforceAdminSessionAuth(req, res, next) {
   if (req.isPublicHost) {
     return next();
   }
@@ -123,17 +327,19 @@ function enforceAdminBasicAuth(req, res, next) {
     return next();
   }
 
-  if (isAdminBasicAuthAuthorized(req, config)) {
+  if (req.path === '/admin-login' || req.path === '/admin-logout') {
     return next();
   }
 
-  res.setHeader('WWW-Authenticate', 'Basic realm="OpenAI Monitor Admin", charset="UTF-8"');
+  if (hasValidAdminSession(req)) {
+    return next();
+  }
 
   if (req.path.startsWith('/api/')) {
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  return res.status(401).send('Authentication required');
+  return res.redirect(302, `/admin-login?next=${encodeURIComponent(normalizeAdminNextPath(req.originalUrl || req.url || '/'))}`);
 }
 
 function isPublicTunnelEnabled() {
@@ -322,6 +528,7 @@ app.use(cors({
   },
 }));
 app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: false }));
 app.use((req, res, next) => {
   req.isPublicHost = isPublicHost(req) && isLoopbackRequest(req);
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -329,7 +536,7 @@ app.use((req, res, next) => {
   res.setHeader('Referrer-Policy', 'same-origin');
   next();
 });
-app.use(enforceAdminBasicAuth);
+app.use(enforceAdminSessionAuth);
 app.use(enforcePublicRateLimit);
 app.use((req, res, next) => {
   if (!req.isPublicHost) {
@@ -353,6 +560,64 @@ app.use((req, res, next) => {
 
   return next();
 });
+
+app.get('/admin-login', (req, res) => {
+  if (req.isPublicHost) {
+    return res.status(404).send('Not found');
+  }
+
+  const config = getAdminBasicAuthConfig();
+  const nextPath = normalizeAdminNextPath(req.query.next || '/');
+  if (!config.enabled || !config.user || !config.pass) {
+    return res.redirect(302, nextPath);
+  }
+
+  if (hasValidAdminSession(req)) {
+    return res.redirect(302, nextPath);
+  }
+
+  res.setHeader('Cache-Control', 'no-store');
+  return res.status(200).send(renderAdminLoginPage({ nextPath }));
+});
+
+app.post('/admin-login', (req, res) => {
+  if (req.isPublicHost) {
+    return res.status(404).send('Not found');
+  }
+
+  const config = getAdminBasicAuthConfig();
+  const nextPath = normalizeAdminNextPath(req.body.next || req.query.next || '/');
+  if (!config.enabled || !config.user || !config.pass) {
+    return res.redirect(302, nextPath);
+  }
+
+  const submittedUser = String(req.body.username || '').trim();
+  const submittedPass = String(req.body.password || '');
+  if (
+    timingSafeEqualText(submittedUser, config.user)
+    && timingSafeEqualText(submittedPass, config.pass)
+  ) {
+    const sessionToken = createAdminSession(config.user);
+    setAdminSessionCookie(res, sessionToken);
+    return res.redirect(302, nextPath);
+  }
+
+  res.setHeader('Cache-Control', 'no-store');
+  return res.status(401).send(renderAdminLoginPage({
+    errorMessage: '账号或密码错误，请重新输入。',
+    nextPath,
+  }));
+});
+
+app.get('/admin-logout', (req, res) => {
+  const sessionToken = getAdminSessionToken(req);
+  if (sessionToken) {
+    adminSessions.delete(sessionToken);
+  }
+  clearAdminSessionCookie(res);
+  return res.redirect(302, '/admin-login');
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // API Routes
