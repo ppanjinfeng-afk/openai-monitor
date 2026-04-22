@@ -294,11 +294,14 @@ const App = {
     }
   },
 
-  async refreshAccountsSurface() {
+  async refreshAccountsSurface(extraLoads = []) {
     await Promise.all([
       this.loadAccounts(this.currentAccountsPage),
       this.loadStats(),
       this.loadOverflowRebalanceRecords(),
+      this.loadWorkspaces(this.currentWorkspacesPage),
+      this.loadWorkspaceDashboard(),
+      ...extraLoads,
     ]);
   },
 
@@ -308,6 +311,20 @@ const App = {
       this.loadWorkspaceDashboard(),
       ...extraLoads,
     ]);
+  },
+
+  async refreshWorkspaceChangeSurfaces(options = {}) {
+    const extraLoads = [];
+
+    if (options.includeLogs) {
+      extraLoads.push(this.loadRecentLogs());
+    }
+
+    if (options.includeCurrentPage && !['dashboard', 'accounts', 'workspaces'].includes(this.currentPage)) {
+      extraLoads.push(this.refreshCurrentPage({ page: this.currentPage }));
+    }
+
+    await this.refreshAccountsSurface(extraLoads);
   },
 
   clearAutoSubPoller(id) {
@@ -1003,10 +1020,10 @@ const App = {
     try {
       const result = await API.checkAccount(id);
       this.toast(`检查完成: ${Components.statusLabels[result.status] || result.status}`, 'success');
-      if (this.currentPage === 'accounts') {
-        await this.loadAccounts();
-      }
-      await this.loadStats();
+      await this.refreshWorkspaceChangeSurfaces({
+        includeLogs: this.currentPage === 'dashboard',
+        includeCurrentPage: true,
+      });
     } catch (err) {
       this.toast('检查失败: ' + err.message, 'error');
     }
@@ -1126,7 +1143,10 @@ const App = {
         this.toast('全量检测已完成', 'success');
       }
       if (!options.skipRefresh) {
-        await this.refreshCurrentPage();
+        await this.refreshWorkspaceChangeSurfaces({
+          includeLogs: this.currentPage === 'dashboard',
+          includeCurrentPage: true,
+        });
       }
     }
 
