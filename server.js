@@ -155,16 +155,17 @@ function enforcePublicRateLimit(req, res, next) {
 
 function isAllowedPublicRequest(req) {
   const pathOnly = req.path;
+  const isReadMethod = req.method === 'GET' || req.method === 'HEAD';
 
-  if (req.method === 'GET' && ['/', '/buy', '/join', '/buy.html', '/join.html', '/favicon.ico'].includes(pathOnly)) {
+  if (isReadMethod && ['/', '/buy', '/join', '/buy.html', '/join.html', '/favicon.ico'].includes(pathOnly)) {
     return true;
   }
 
-  if (req.method === 'GET' && pathOnly.startsWith('/assets/')) {
+  if (isReadMethod && pathOnly.startsWith('/assets/')) {
     return true;
   }
 
-  if (req.method === 'GET' && pathOnly === '/api/payments/product') {
+  if (isReadMethod && pathOnly === '/api/payments/product') {
     return true;
   }
 
@@ -176,11 +177,11 @@ function isAllowedPublicRequest(req) {
     return true;
   }
 
-  if (req.method === 'GET' && /^\/api\/payments\/orders\/[^/]+$/.test(pathOnly)) {
+  if (isReadMethod && /^\/api\/payments\/orders\/[^/]+$/.test(pathOnly)) {
     return true;
   }
 
-  if (req.method === 'GET' && /^\/api\/payments\/status\/[^/]+$/.test(pathOnly)) {
+  if (isReadMethod && /^\/api\/payments\/status\/[^/]+$/.test(pathOnly)) {
     return true;
   }
 
@@ -211,7 +212,7 @@ function isAllowedPublicRequest(req) {
     return true;
   }
 
-  if (req.method === 'GET' && /^\/api\/cdk\/query\/[^/]+$/.test(pathOnly)) {
+  if (isReadMethod && /^\/api\/cdk\/query\/[^/]+$/.test(pathOnly)) {
     return true;
   }
 
