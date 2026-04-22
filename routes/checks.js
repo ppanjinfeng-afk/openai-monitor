@@ -251,17 +251,24 @@ router.get('/status', (req, res) => {
 });
 
 router.get('/logs', (req, res) => {
-  const { account_id, limit = 100, page = 1 } = req.query;
+  const { account_id, limit = 100, page = 1, visible_only: visibleOnly } = req.query;
   let query = `
     SELECT cl.*, a.email, a.label
     FROM check_logs cl
     JOIN accounts a ON cl.account_id = a.id
   `;
   const params = [];
+  const conditions = [];
 
   if (account_id) {
-    query += ' WHERE cl.account_id = ?';
+    conditions.push('cl.account_id = ?');
     params.push(account_id);
+  } else if (String(visibleOnly || '').toLowerCase() === 'true') {
+    conditions.push(`a.status != 'invalid_credentials'`);
+  }
+
+  if (conditions.length > 0) {
+    query += ` WHERE ${conditions.join(' AND ')}`;
   }
 
   query += ' ORDER BY cl.checked_at DESC';

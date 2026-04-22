@@ -1614,6 +1614,12 @@ router.get('/overflow-rebalance-records', (req, res) => {
 
 // GET /api/accounts/stats — overall statistics
 router.get('/stats', (req, res) => {
+  const activeQuotaCondition = `
+    status = 'active'
+    AND access_token IS NOT NULL
+    AND access_token != ''
+  `;
+
   const mainStats = db.prepare(`
     SELECT
       COUNT(*) AS total,
@@ -1622,16 +1628,16 @@ router.get('/stats', (req, res) => {
       SUM(CASE WHEN status = 'invalid_credentials' THEN 1 ELSE 0 END) AS invalid,
       SUM(CASE WHEN status = 'no_password' THEN 1 ELSE 0 END) AS noPassword,
       SUM(CASE WHEN status IN ('unknown', 'error', 'rate_limited') THEN 1 ELSE 0 END) AS unknown,
-      COALESCE(SUM(invited_count), 0) AS invitesUsed,
-      COALESCE(SUM(invite_total), 0) AS invitesTotal,
-      SUM(CASE WHEN status = 'active' AND access_token IS NOT NULL AND access_token != '' THEN 1 ELSE 0 END) AS quotaSyncEligible,
-      COALESCE(SUM(CASE WHEN quota_sync_status = 'success' THEN 1 ELSE 0 END), 0) AS quotaSynced,
-      COALESCE(SUM(CASE WHEN quota_sync_status = 'error' THEN 1 ELSE 0 END), 0) AS quotaFailed,
-      COALESCE(SUM(CASE WHEN quota_sync_status = 'skipped' THEN 1 ELSE 0 END), 0) AS quotaSkipped,
-      COALESCE(SUM(CASE WHEN quota_sync_status = 'never' OR quota_sync_status IS NULL OR TRIM(quota_sync_status) = '' THEN 1 ELSE 0 END), 0) AS quotaNever,
-      COALESCE(SUM(CASE WHEN invited_count > invite_total THEN 1 ELSE 0 END), 0) AS overQuota,
-      COALESCE(SUM(CASE WHEN invited_count >= invite_total THEN 1 ELSE 0 END), 0) AS fullQuota,
-      MAX(quota_last_synced_at) AS quotaLastSyncedAt
+      COALESCE(SUM(CASE WHEN ${activeQuotaCondition} THEN invited_count ELSE 0 END), 0) AS invitesUsed,
+      COALESCE(SUM(CASE WHEN ${activeQuotaCondition} THEN invite_total ELSE 0 END), 0) AS invitesTotal,
+      SUM(CASE WHEN ${activeQuotaCondition} THEN 1 ELSE 0 END) AS quotaSyncEligible,
+      COALESCE(SUM(CASE WHEN ${activeQuotaCondition} AND quota_sync_status = 'success' THEN 1 ELSE 0 END), 0) AS quotaSynced,
+      COALESCE(SUM(CASE WHEN ${activeQuotaCondition} AND quota_sync_status = 'error' THEN 1 ELSE 0 END), 0) AS quotaFailed,
+      COALESCE(SUM(CASE WHEN ${activeQuotaCondition} AND quota_sync_status = 'skipped' THEN 1 ELSE 0 END), 0) AS quotaSkipped,
+      COALESCE(SUM(CASE WHEN ${activeQuotaCondition} AND (quota_sync_status = 'never' OR quota_sync_status IS NULL OR TRIM(quota_sync_status) = '') THEN 1 ELSE 0 END), 0) AS quotaNever,
+      COALESCE(SUM(CASE WHEN ${activeQuotaCondition} AND invited_count > invite_total THEN 1 ELSE 0 END), 0) AS overQuota,
+      COALESCE(SUM(CASE WHEN ${activeQuotaCondition} AND invited_count >= invite_total THEN 1 ELSE 0 END), 0) AS fullQuota,
+      MAX(CASE WHEN ${activeQuotaCondition} THEN quota_last_synced_at ELSE NULL END) AS quotaLastSyncedAt
     FROM accounts
   `).get();
 

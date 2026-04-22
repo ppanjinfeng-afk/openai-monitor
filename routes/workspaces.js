@@ -700,22 +700,30 @@ router.get('/dashboard', (req, res) => {
   }
 
   const logRows = db.prepare(`
-    SELECT status, message
-    FROM check_logs
-    WHERE checked_at >= datetime('now', '-7 days')
-      AND status IN ('error', 'invalid_credentials', 'rate_limited', 'banned')
-    ORDER BY checked_at DESC
+    SELECT cl.status, cl.message
+    FROM check_logs cl
+    JOIN accounts a ON a.id = cl.account_id
+    WHERE a.status = 'active'
+      AND a.access_token IS NOT NULL
+      AND a.access_token != ''
+      AND cl.checked_at >= datetime('now', '-7 days')
+      AND cl.status IN ('error', 'invalid_credentials', 'rate_limited', 'banned')
+    ORDER BY cl.checked_at DESC
     LIMIT 1000
   `).all();
   const inviteRows = db.prepare(`
-    SELECT status, message, failure_category
-    FROM invites
-    WHERE updated_at >= datetime('now', '-7 days')
+    SELECT i.status, i.message, i.failure_category
+    FROM invites i
+    JOIN accounts a ON a.id = i.account_id
+    WHERE a.status = 'active'
+      AND a.access_token IS NOT NULL
+      AND a.access_token != ''
+      AND i.updated_at >= datetime('now', '-7 days')
       AND (
-        status = 'error'
-        OR COALESCE(failure_category, '') != ''
+        i.status = 'error'
+        OR COALESCE(i.failure_category, '') != ''
       )
-    ORDER BY updated_at DESC
+    ORDER BY i.updated_at DESC
     LIMIT 1000
   `).all();
 

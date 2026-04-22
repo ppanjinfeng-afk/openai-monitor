@@ -711,7 +711,7 @@ const App = {
   // ===== Logs =====
   async loadRecentLogs() {
     try {
-      const data = await API.getLogs({ limit: 20 });
+      const data = await API.getLogs({ limit: 20, visible_only: true });
       const container = document.getElementById('recent-logs');
       if (data.logs.length === 0) {
         container.innerHTML = `
