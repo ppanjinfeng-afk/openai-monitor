@@ -17,10 +17,10 @@ curl -fsSL https://raw.githubusercontent.com/<你的GitHub用户名>/<你的仓�
 - `data/monitor.db` 默认不会提交到 GitHub
 - 账号、令牌、支付、Telegram、工作区等数据都在这个数据库里
 - 代码可以走 GitHub，数据库建议单独传一次到 VPS
+- Ubuntu 默认部署直接走 `Nginx -> 127.0.0.1:3000`
 
 数据库单独上传示例：
 
 ```bash
 scp ./data/monitor.db root@<你的VPSIP>:/opt/openai-monitor/data/monitor.db
 ```
-
