@@ -1882,11 +1882,23 @@ const App = {
     try {
       const result = await API.syncAllWorkspaces();
       const summary = result.summary || {};
+      const removedCount = (result.results || [])
+        .flatMap(item => item.results || [])
+        .filter(item => item && item.removed)
+        .length;
       this.toast(
         `工作区同步完成: 账号成功 ${summary.syncedAccounts || 0}/${summary.accountTotal || 0}，工作区成功 ${summary.syncedWorkspaces || 0}/${summary.workspaceTotal || 0}`,
         summary.failedAccounts || summary.failedWorkspaces ? 'warning' : 'success'
       );
-      await Promise.all([this.loadWorkspaces(this.currentWorkspacesPage), this.loadWorkspaceDashboard(), this.loadStats()]);
+      if (removedCount > 0) {
+        this.toast(`已自动移除 ${removedCount} 个失效空间快照`, 'info');
+      }
+      await Promise.all([
+        this.loadAccounts(this.currentAccountsPage),
+        this.loadWorkspaces(this.currentWorkspacesPage),
+        this.loadWorkspaceDashboard(),
+        this.loadStats(),
+      ]);
     } catch (err) {
       this.toast(`同步工作区失败: ${err.message}`, 'error');
     }
@@ -1900,7 +1912,16 @@ const App = {
         `同步完成: ${result.workspaceName || result.workspaceId} => 成员 ${result.memberCount || 0} / 占位 ${result.occupiedSeats || 0} / 待接受 ${result.pendingInvites || 0}`,
         'success'
       );
-      await Promise.all([this.loadWorkspaces(this.currentWorkspacesPage), this.loadWorkspaceDashboard(), this.loadInvites(this.currentInvitesPage)]);
+      if (result.removed) {
+        this.toast(`已自动移除失效空间快照: ${result.workspaceName || result.workspaceId || id}`, 'info');
+      }
+      await Promise.all([
+        this.loadAccounts(this.currentAccountsPage),
+        this.loadWorkspaces(this.currentWorkspacesPage),
+        this.loadWorkspaceDashboard(),
+        this.loadStats(),
+        this.loadInvites(this.currentInvitesPage),
+      ]);
     } catch (err) {
       this.toast(`同步工作区失败: ${err.message}`, 'error');
     }
