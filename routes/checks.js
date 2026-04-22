@@ -13,7 +13,7 @@ let isChecking = false;
 
 const OAUTH_CALLBACK_PORT = 1455;
 const OAUTH_CALLBACK_ORIGIN = `http://localhost:${OAUTH_CALLBACK_PORT}`;
-const OAUTH_FLOW_TIMEOUT_MS = 180000;
+const OAUTH_FLOW_TIMEOUT_MS = 600000;
 
 // state -> { codeVerifier, accountId, accountEmail, timeoutId }
 const activeOAuthFlows = new Map();
@@ -68,6 +68,29 @@ async function handleOAuthCallback(cbReq, cbRes) {
     return;
   }
 
+  try {
+    await completeOAuthAuthorizationFromUrl(url);
+
+    cbRes.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    cbRes.end(renderOAuthResponse(
+      'Authorization completed',
+      'Tokens were saved successfully. You can close this page now.',
+      '#10b981'
+    ));
+
+    console.log('[OAuth] Authorization completed via callback listener');
+  } catch (err) {
+    cbRes.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    cbRes.end(renderOAuthResponse('Token exchange failed', err.message, '#ef4444'));
+    console.error('[OAuth] Token exchange failed via callback listener:', err.message);
+  }
+}
+
+async function completeOAuthAuthorizationFromUrl(callbackUrl) {
+  const url = callbackUrl instanceof URL
+    ? callbackUrl
+    : new URL(String(callbackUrl || '').trim(), OAUTH_CALLBACK_ORIGIN);
+
   const code = url.searchParams.get('code');
   const returnedState = url.searchParams.get('state');
   const error = url.searchParams.get('error');
@@ -75,27 +98,17 @@ async function handleOAuthCallback(cbReq, cbRes) {
   const flow = returnedState ? activeOAuthFlows.get(returnedState) : null;
 
   if (!returnedState || !flow) {
-    cbRes.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    cbRes.end(renderOAuthResponse(
-      'Authorization expired',
-      'This OAuth request is no longer active. Please start again from the dashboard.',
-      '#ef4444'
-    ));
-    return;
+    throw new Error('This OAuth request is no longer active. Please start again from the dashboard.');
   }
 
   if (error) {
-    cbRes.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    cbRes.end(renderOAuthResponse('Authorization failed', errorDesc, '#ef4444'));
     clearOAuthFlow(returnedState);
-    return;
+    throw new Error(errorDesc);
   }
 
   if (!code) {
-    cbRes.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    cbRes.end(renderOAuthResponse('Authorization failed', 'Missing authorization code.', '#ef4444'));
     clearOAuthFlow(returnedState);
-    return;
+    throw new Error('Missing authorization code.');
   }
 
   try {
@@ -124,18 +137,12 @@ async function handleOAuthCallback(cbReq, cbRes) {
       });
     }
 
-    cbRes.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    cbRes.end(renderOAuthResponse(
-      'Authorization completed',
-      'Tokens were saved successfully. You can close this page now.',
-      '#10b981'
-    ));
-
     console.log(`[OAuth] Account ${flow.accountEmail} authorized successfully`);
-  } catch (err) {
-    cbRes.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    cbRes.end(renderOAuthResponse('Token exchange failed', err.message, '#ef4444'));
-    console.error(`[OAuth] Token exchange failed for ${flow.accountEmail}:`, err.message);
+    return {
+      success: true,
+      accountId: flow.accountId,
+      accountEmail: flow.accountEmail,
+    };
   } finally {
     clearOAuthFlow(returnedState);
   }
@@ -306,6 +313,25 @@ router.post('/oauth/start/:id', (req, res) => {
       console.error('[OAuth] Failed to start callback server:', err.message);
       res.status(500).json({ error: message });
     });
+});
+
+router.post('/oauth/complete', async (req, res) => {
+  const callbackUrl = String(req.body?.callback_url || req.body?.callbackUrl || '').trim();
+  if (!callbackUrl) {
+    return res.status(400).json({ error: 'Missing callback URL' });
+  }
+
+  try {
+    const result = await completeOAuthAuthorizationFromUrl(callbackUrl);
+    return res.json({
+      success: true,
+      message: `OAuth 授权已完成：${result.accountEmail}`,
+      account_id: result.accountId,
+      account_email: result.accountEmail,
+    });
+  } catch (err) {
+    return res.status(400).json({ error: err.message || 'OAuth completion failed' });
+  }
 });
 
 module.exports = router;

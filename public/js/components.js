@@ -1532,6 +1532,45 @@ const Components = {
     `;
   },
 
+  oauthAssistModal(account = null, authUrl = '') {
+    const accountName = this.escapeHtml(account?.email || '当前账号');
+    const safeAuthUrl = this.escapeHtml(authUrl || '');
+    return `
+      <div>
+        <p class="form-intro">
+          已为 ${accountName} 生成新的 OAuth 授权链接。请先在新标签页完成 OpenAI 登录。
+        </p>
+        <div class="form-group">
+          <label>第 1 步：打开授权页</label>
+          <div class="form-help">
+            如果浏览器没有自动打开，请点击下面这个按钮重新打开授权页。
+          </div>
+          <div class="form-actions form-actions-spaced">
+            <a class="btn btn-primary" href="${safeAuthUrl}" target="_blank" rel="noopener noreferrer">打开授权页</a>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="oauth-callback-url">第 2 步：粘贴回调链接</label>
+          <div class="form-help">
+            如果授权完成后页面跳到 <code>http://localhost:1455/auth/callback...</code> 并提示无法访问，
+            请把浏览器地址栏里的完整链接复制到下面，再点“完成授权”。
+          </div>
+          <textarea
+            id="oauth-callback-url"
+            class="form-input"
+            rows="5"
+            placeholder="http://localhost:1455/auth/callback?code=...&state=..."
+            spellcheck="false"
+          ></textarea>
+        </div>
+        <div class="form-actions form-actions-spaced">
+          <button type="button" class="btn btn-secondary" onclick="App.closeModal()">取消</button>
+          <button type="button" class="btn btn-primary" id="btn-complete-oauth" onclick="App.completeOAuthFromCallback()">完成授权</button>
+        </div>
+      </div>
+    `;
+  },
+
   importModal() {
     return `
       <div>

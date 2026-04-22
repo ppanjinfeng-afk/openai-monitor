@@ -324,6 +324,13 @@ const API = {
     return this.request(`/api/checks/oauth/start/${id}`, { method: 'POST' });
   },
 
+  completeOAuth(callbackUrl) {
+    return this.request('/api/checks/oauth/complete', {
+      method: 'POST',
+      body: JSON.stringify({ callback_url: callbackUrl }),
+    });
+  },
+
   getLogs(params = {}) {
     const qs = new URLSearchParams(params).toString();
     return this.request(`/api/checks/logs?${qs}`);

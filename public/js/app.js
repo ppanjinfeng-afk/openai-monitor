@@ -4088,5 +4088,69 @@ const App = {
   },
 };
 
+App.oauthAccount = async function(id) {
+  this.toast('正在启动 OAuth 授权...', 'info');
+  try {
+    const account = Array.isArray(this.accounts)
+      ? this.accounts.find(item => Number(item.id) === Number(id))
+      : null;
+    const result = await API.startOAuth(id);
+    const popup = window.open(result.authUrl, '_blank', 'noopener,noreferrer');
+    this.showModal('完成 OAuth 授权', Components.oauthAssistModal(account, result.authUrl), { type: 'oauth' });
+    document.getElementById('oauth-callback-url')?.focus();
+    this.toast(
+      popup
+        ? '授权页已打开，完成登录后把 localhost 回调链接贴回弹窗即可完成授权'
+        : '浏览器拦截了新标签页，请点击弹窗里的“打开授权页”继续授权',
+      popup ? 'info' : 'warning'
+    );
+    setTimeout(() => this.loadAccounts(), 5000);
+    setTimeout(() => this.loadAccounts(), 15000);
+    setTimeout(() => this.loadAccounts(), 30000);
+  } catch (err) {
+    this.toast(`OAuth 启动失败: ${err.message}`, 'error');
+  }
+};
+
+App.completeOAuthFromCallback = async function() {
+  const input = document.getElementById('oauth-callback-url');
+  const button = document.getElementById('btn-complete-oauth');
+  const callbackUrl = String(input?.value || '').trim();
+
+  if (!callbackUrl) {
+    this.toast('请先粘贴完整的回调链接', 'warning');
+    input?.focus();
+    return;
+  }
+
+  if (!/^https?:\/\/localhost:1455\/auth\/callback/i.test(callbackUrl)) {
+    this.toast('请粘贴完整的 localhost:1455/auth/callback 回调地址', 'warning');
+    input?.focus();
+    return;
+  }
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = '正在完成授权...';
+  }
+
+  try {
+    const result = await API.completeOAuth(callbackUrl);
+    this.toast(result.message || 'OAuth 授权已完成', 'success');
+    this.closeModal();
+    await this.refreshWorkspaceChangeSurfaces({
+      includeLogs: this.currentPage === 'dashboard',
+      includeCurrentPage: true,
+    });
+  } catch (err) {
+    this.toast(`OAuth 完成失败: ${err.message}`, 'error');
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = '完成授权';
+    }
+  }
+};
+
 // Start the app
 document.addEventListener('DOMContentLoaded', () => App.init());
