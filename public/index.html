@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="OpenAI 账号监控平台 - 监控封禁状态和邀请名额">
+  <title>OpenAI 账号监控平台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <div class="logo-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 6v6l4 2"/>
+            </svg>
+          </div>
+          <span class="logo-text">OAI Monitor</span>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="sidebar-section-label">监控 / 运营</div>
+        <a href="#" class="nav-item active" data-page="dashboard" id="nav-dashboard">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <span>仪表盘</span>
+        </a>
+        <a href="#" class="nav-item" data-page="accounts" id="nav-accounts">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>账号管理</span>
+        </a>
+        <a href="#" class="nav-item" data-page="workspaces" id="nav-workspaces">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 17l9 4 9-4"/><path d="M3 12l9 4 9-4"/></svg>
+          <span>工作区</span>
+        </a>
+        <a href="#" class="nav-item" data-page="audit" id="nav-audit">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M11 8v3l2 2"/></svg>
+          <span>邮箱审计</span>
+        </a>
+        <a href="#" class="nav-item" data-page="invites" id="nav-invites">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          <span>邀请记录</span>
+        </a>
+        <a href="#" class="nav-item" data-page="logs" id="nav-logs">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span>检查日志</span>
+        </a>
+        <div class="sidebar-section-label">工具 / 设置</div>
+        <a href="#" class="nav-item" data-page="cdk-manage" id="nav-cdk-manage">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 5H3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z"/><path d="M7 12h10"/><circle cx="12" cy="12" r="1"/></svg>
+          <span>CDK 管理</span>
+        </a>
+        <a href="#" class="nav-item" data-page="checkout-tools" id="nav-checkout-tools">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 7h20"/><path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M7 11h10"/><path d="M7 15h3"/><path d="M14 15h3"/></svg>
+          <span>结账工具</span>
+        </a>
+        <a href="#" class="nav-item" data-page="member-cleanup" id="nav-member-cleanup">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M18 8l3 3"/><path d="M21 8l-3 3"/></svg>
+          <span>成员清理</span>
+        </a>
+        <a href="#" class="nav-item" data-page="settings" id="nav-settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>设置</span>
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="scheduler-status" id="scheduler-status">
+          <div class="status-dot active"></div>
+          <span>调度器运行中</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Header -->
+      <header class="top-header">
+        <div class="header-left">
+          <button class="menu-toggle" id="menu-toggle">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div class="page-title-wrap">
+            <span class="page-kicker">运营总览</span>
+            <h1 class="page-title" id="page-title">仪表盘</h1>
+          </div>
+        </div>
+        <div class="header-right">
+          <button class="btn btn-ghost" id="btn-refresh" title="刷新数据">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </button>
+          <button class="btn btn-primary header-cta" id="btn-check-all" title="立即检查所有账号">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <span>立即检查</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Page Content -->
+      <div class="page-content" id="page-content">
+        <!-- Dashboard Page -->
+        <div class="page" id="page-dashboard">
+          <section class="dashboard-hero panel panel-hero">
+            <div class="dashboard-hero-main">
+              <div class="dashboard-hero-copy">
+                <span class="dashboard-hero-kicker">OpenAI Monitor Console</span>
+                <h2 class="dashboard-hero-title">首页先看重点状态，再快速下钻处理异常。</h2>
+                <p class="dashboard-hero-text">把账号可用性、工作区容量、同步状态和异常流转压缩到一个首页里，先看风险，再决定下一步操作。</p>
+              </div>
+              <div class="dashboard-hero-actions">
+                <button class="btn btn-primary" onclick="App.navigateTo('accounts')">进入账号管理</button>
+                <button class="btn btn-secondary btn-tone-blue" onclick="App.navigateTo('workspaces')">查看工作区</button>
+              </div>
+            </div>
+          </section>
+
+          <div class="stats-grid dashboard-stats-grid" id="stats-grid">
+            <div class="stat-card stat-total interactive" data-dashboard-action="accounts_all" tabindex="0" role="button" title="查看全部账号">
+              <div class="stat-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-total">0</span>
+                <span class="stat-label">总账号</span>
+              </div>
+            </div>
+            <div class="stat-card stat-active interactive" data-dashboard-action="accounts_active" tabindex="0" role="button" title="查看活跃账号">
+              <div class="stat-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              </div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-active">0</span>
+                <span class="stat-label">活跃</span>
+              </div>
+            </div>
+            <div class="stat-card stat-invites interactive" data-dashboard-action="accounts_quota" tabindex="0" role="button" title="查看账号名额">
+              <div class="stat-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+              </div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-invites">0/0</span>
+                <span class="stat-label">邀请名额</span>
+              </div>
+            </div>
+            <div class="stat-card stat-quota-sync interactive" data-dashboard-action="quota_sync" tabindex="0" role="button" title="查看配额同步详情">
+              <div class="stat-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 22v-6h6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L3 8"/><path d="M3.51 15a9 9 0 0 0 14.85 3.36L21 16"/></svg>
+              </div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-quota-sync">0/0</span>
+                <span class="stat-label">配额同步</span>
+                <span class="stat-subtext" id="stat-quota-sync-meta">从未同步</span>
+              </div>
+            </div>
+            <div class="stat-card stat-invalid interactive" data-dashboard-action="accounts_invalid" tabindex="0" role="button" title="查看令牌无效账号">
+              <div class="stat-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>
+              </div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-invalid">0</span>
+                <span class="stat-label">令牌无效</span>
+                <span class="stat-subtext" id="stat-invalid-meta">当前没有</span>
+              </div>
+            </div>
+            <div class="stat-card stat-over-quota interactive" data-dashboard-action="over_quota" tabindex="0" role="button" title="查看超额工作区">
+              <div class="stat-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              </div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-over-quota">0</span>
+                <span class="stat-label">超额预警</span>
+                <span class="stat-subtext" id="stat-over-quota-meta">暂无预警</span>
+              </div>
+            </div>
+            <div class="stat-card stat-bad-invite interactive" data-dashboard-action="invite_health" tabindex="0" role="button" title="查看坏号检测结果">
+              <div class="stat-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M11 8v3"/><path d="M11 16h.01"/></svg>
+              </div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-bad-invite">0</span>
+                <span class="stat-label">坏号检测</span>
+                <span class="stat-subtext" id="stat-bad-invite-meta">暂无异常</span>
+              </div>
+            </div>
+            <div class="stat-card stat-banned interactive stat-card-alert" data-dashboard-action="accounts_banned" tabindex="0" role="button" title="查看封号类账号">
+              <div class="stat-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+              </div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-banned">0</span>
+                <span class="stat-label">封号类</span>
+                <span class="stat-subtext">优先检查异常账号</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="dashboard-story-grid">
+            <div class="panel dashboard-story-panel">
+              <div class="panel-header dashboard-panel-header">
+                <div>
+                  <h2>最近状态变动</h2>
+                  <p>优先关注最近的状态切换和异常变化。</p>
+                </div>
+              </div>
+              <div class="panel-body" id="recent-logs">
+                <div class="empty-state">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <p>暂无检查记录</p>
+                </div>
+              </div>
+            </div>
+            <div class="dashboard-story-side">
+              <div class="panel dashboard-mini-panel">
+                <div class="panel-header dashboard-panel-header">
+                  <div>
+                    <h2>工作区预警</h2>
+                    <p>快速查看容量风险和同步异常。</p>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div id="workspace-alerts-list" class="dashboard-alert-list">
+                    <div class="empty-state"><p>暂无预警</p></div>
+                  </div>
+                </div>
+              </div>
+              <div class="panel dashboard-mini-panel">
+                <div class="panel-header dashboard-panel-header">
+                  <div>
+                    <h2>失败原因分布</h2>
+                    <p>定位近期最常见的失败类型。</p>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div id="failure-category-list" class="dashboard-failure-list">
+                    <div class="empty-state"><p>暂无失败统计</p></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Accounts Page -->
+        <div class="page hidden" id="page-accounts">
+          <div class="page-section-head page-section-head-inline">
+            <div>
+              <span class="page-section-kicker">Accounts Operations</span>
+              <h2 class="page-section-title">账号池、授权状态、配额与邀请能力总览。</h2>
+              <p class="page-section-text">集中处理搜索、筛选、配额同步、坏号检测、自动邀请和成员管理。</p>
+            </div>
+          </div>
+
+          <div class="accounts-console-grid">
+            <div class="accounts-console-main">
+              <div class="toolbar toolbar-premium compact-toolbar toolbar-clustered">
+                <div class="toolbar-left">
+                  <div class="search-box">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" placeholder="搜索邮箱或标签..." id="search-input">
+                  </div>
+                  <div class="filter-group">
+                    <select id="status-filter" class="select-input">
+                      <option value="all">全部状态</option>
+                      <option value="active">活跃</option>
+                      <option value="banned">封号</option>
+                      <option value="invite_degraded">坏号</option>
+                      <option value="no_password">无密码</option>
+                      <option value="unknown">未知</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="toolbar-right">
+                  <button class="btn btn-secondary btn-tone-orange" id="btn-sync-quotas">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 22v-6h6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L3 8"/><path d="M3.51 15a9 9 0 0 0 14.85 3.36L21 16"/></svg>
+                    <span>同步名额</span>
+                  </button>
+                  <button class="btn btn-secondary btn-tone-warm" id="btn-invite-health">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M11 8v3"/><path d="M11 16h.01"/></svg>
+                    <span>坏号检测</span>
+                  </button>
+                  <button class="btn btn-secondary" id="btn-import">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <span>批量导入</span>
+                  </button>
+                  <button class="btn btn-secondary btn-tone-blue" id="btn-bulk-auto-invite">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>
+                    <span>批量自动邀请</span>
+                  </button>
+                  <button class="btn btn-secondary btn-tone-blue" id="btn-auto-invite">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                    <span>自动邀请</span>
+                  </button>
+                  <button class="btn btn-primary" id="btn-add-account">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    <span>添加账号</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="accounts-table-wrapper">
+                <table class="accounts-table" id="accounts-table">
+                  <thead>
+                    <tr>
+                      <th><input type="checkbox" id="select-all-checkbox"></th>
+                      <th>邮箱</th>
+                      <th>标签</th>
+                      <th>状态</th>
+                      <th>邀请名额</th>
+                      <th>最后检查</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="accounts-tbody">
+                  </tbody>
+                </table>
+                <div class="empty-state hidden" id="accounts-empty">
+                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" y1="11" x2="23" y2="11"/></svg>
+                  <p>暂无账号</p>
+                  <p class="text-muted">点击"添加账号"开始</p>
+                </div>
+              </div>
+              <div class="pagination" id="pagination"></div>
+              <div class="bulk-actions hidden" id="bulk-actions">
+                <span id="selected-count">0 个已选</span>
+                <button class="btn btn-danger btn-sm" id="btn-bulk-delete">批量删除</button>
+              </div>
+            </div>
+
+            <aside class="accounts-console-side">
+              <div class="quota-overview quota-overview-vertical">
+                <div class="quota-overview-card">
+                  <span class="quota-overview-label">上次同步</span>
+                  <strong class="quota-overview-value" id="quota-last-synced">从未同步</strong>
+                </div>
+                <div class="quota-overview-card">
+                  <span class="quota-overview-label">同步状态</span>
+                  <strong class="quota-overview-value" id="quota-sync-summary">0/0 成功</strong>
+                </div>
+                <div class="quota-overview-card warning">
+                  <span class="quota-overview-label">超额预警</span>
+                  <strong class="quota-overview-value" id="quota-over-quota-summary">暂无</strong>
+                </div>
+              </div>
+              <div class="panel dashboard-mini-panel">
+                <div class="panel-header dashboard-panel-header">
+                  <div>
+                    <h2>迁移记录区</h2>
+                    <p id="overflow-rebalance-meta">最近自动迁移与修复结果</p>
+                  </div>
+                  <button class="btn btn-ghost btn-sm" id="btn-refresh-overflow-records">刷新</button>
+                </div>
+                <div class="panel-body">
+                  <div id="overflow-rebalance-records" class="overflow-record-list">
+                    <div class="empty-state overflow-records-empty">
+                      <p>正在读取迁移记录...</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        <!-- Logs Page -->
+        <div class="page hidden" id="page-logs">
+          <div class="page-section-head">
+            <div>
+              <span class="page-section-kicker">Activity Feed</span>
+              <h2 class="page-section-title">检查日志</h2>
+              <p class="page-section-text">集中查看最近检查结果、状态切换和异常信息。</p>
+            </div>
+          </div>
+          <div class="panel compact-panel">
+            <div class="panel-header">
+              <h2>最近日志</h2>
+            </div>
+            <div class="panel-body">
+              <div class="logs-list" id="logs-list">
+                <div class="empty-state">
+                  <p>暂无日志</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Invites Page -->
+        <div class="page hidden" id="page-invites">
+          <div class="page-section-head page-section-head-inline">
+            <div>
+              <span class="page-section-kicker">Invite Timeline</span>
+              <h2 class="page-section-title">邀请记录</h2>
+              <p class="page-section-text">查看邀请发送、补发、回退和失败明细。</p>
+            </div>
+          </div>
+          <div class="toolbar toolbar-premium compact-toolbar">
+            <div class="toolbar-left">
+              <div class="search-box">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" placeholder="搜索受邀邮箱或账号..." id="search-invites-input">
+              </div>
+            </div>
+            <div class="toolbar-right">
+              <button class="btn btn-secondary" id="btn-refresh-invites">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                <span>刷新记录</span>
+              </button>
+            </div>
+          </div>
+          <div class="accounts-table-wrapper">
+            <table class="accounts-table" id="invites-table">
+              <thead>
+                <tr>
+                  <th>受邀邮箱</th>
+                  <th>邀请账号</th>
+                  <th>状态详情</th>
+                  <th>邀请时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="invites-tbody">
+              </tbody>
+            </table>
+            <div class="empty-state hidden" id="invites-empty">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              <p>暂无邀请记录</p>
+            </div>
+          </div>
+          <div class="pagination" id="invites-pagination"></div>
+        </div>
+
+        <div class="page hidden" id="page-workspaces">
+          <div class="page-section-head page-section-head-inline">
+            <div>
+              <span class="page-section-kicker">Workspace Control</span>
+              <h2 class="page-section-title">查看容量、成员结构、同步健康度与跨工作区搜索。</h2>
+              <p class="page-section-text">集中处理容量风险、成员排查、邀请入口和同步状态。</p>
+            </div>
+          </div>
+
+          <div class="workspaces-console-grid">
+            <div class="workspaces-console-main">
+              <div class="toolbar toolbar-premium compact-toolbar toolbar-clustered">
+                <div class="toolbar-left">
+                  <div class="search-box">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" placeholder="搜索工作区、账号邮箱..." id="search-workspaces-input">
+                  </div>
+                  <div class="filter-group">
+                    <select id="workspace-sync-filter" class="select-input">
+                      <option value="all">全部状态</option>
+                      <option value="success">同步成功</option>
+                      <option value="error">同步失败</option>
+                      <option value="stale">未再返回</option>
+                    </select>
+                  </div>
+                  <div class="filter-group">
+                    <select id="workspace-capacity-filter" class="select-input">
+                      <option value="all">全部容量</option>
+                      <option value="available">余量充足</option>
+                      <option value="warning">仅剩 1 席</option>
+                      <option value="full">刚好满员</option>
+                      <option value="over">已经超额</option>
+                    </select>
+                  </div>
+                  <div class="filter-group">
+                    <select id="workspace-sort-by" class="select-input">
+                      <option value="health">按健康度</option>
+                      <option value="remaining">按预占剩余</option>
+                      <option value="members">按成员数</option>
+                      <option value="updated">按更新时间</option>
+                      <option value="name">按工作区名称</option>
+                    </select>
+                  </div>
+                  <div class="filter-group">
+                    <select id="workspace-sort-direction" class="select-input">
+                      <option value="desc">降序</option>
+                      <option value="asc">升序</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="toolbar-right">
+                  <button class="btn btn-ghost" id="btn-reset-workspace-filters">
+                    <span>重置筛选</span>
+                  </button>
+                  <button class="btn btn-secondary" id="btn-sync-workspaces">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 22v-6h6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L3 8"/><path d="M3.51 15a9 9 0 0 0 14.85 3.36L21 16"/></svg>
+                    <span>同步全部工作区</span>
+                  </button>
+                </div>
+              </div>
+              <div class="workspace-results-meta" id="workspace-results-meta">正在读取工作区...</div>
+              <div class="accounts-table-wrapper">
+                <table class="accounts-table" id="workspaces-table">
+                  <thead>
+                    <tr>
+                      <th>锁定</th>
+                      <th>工作区</th>
+                      <th>所属账号</th>
+                      <th>状态 / 健康</th>
+                      <th>容量</th>
+                      <th>同步信息</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="workspaces-tbody"></tbody>
+                </table>
+                <div class="empty-state hidden" id="workspaces-empty">
+                  <p>暂无工作区快照</p>
+                </div>
+              </div>
+              <div class="pagination" id="workspaces-pagination"></div>
+
+              <div class="panel section-spacer-top">
+                <div class="panel-header">
+                  <h2>跨工作区成员搜索</h2>
+                </div>
+                <div class="panel-body">
+                  <div class="toolbar workspace-subtoolbar">
+                    <div class="toolbar-left">
+                      <div class="search-box">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" placeholder="输入邮箱或名字" id="workspace-member-search-input">
+                      </div>
+                    </div>
+                    <div class="toolbar-right">
+                      <button class="btn btn-secondary" id="btn-workspace-member-search">搜索成员</button>
+                    </div>
+                  </div>
+                  <div class="accounts-table-wrapper">
+                    <table class="accounts-table hidden" id="workspace-member-search-table">
+                      <thead>
+                        <tr>
+                          <th>邮箱</th>
+                          <th>名字</th>
+                          <th>工作区</th>
+                          <th>账号</th>
+                          <th>角色</th>
+                        </tr>
+                      </thead>
+                      <tbody id="workspace-member-search-tbody"></tbody>
+                    </table>
+                    <div class="empty-state" id="workspace-member-search-empty">
+                      <p>输入关键词后开始搜索</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <aside class="workspaces-console-side">
+              <div class="workspace-summary-grid" id="workspace-summary-grid"></div>
+            </aside>
+          </div>
+        </div>
+
+        <div class="page hidden" id="page-audit">
+          <div class="page-section-head page-section-head-inline">
+            <div>
+              <span class="page-section-kicker">Audit & Cleanup</span>
+              <h2 class="page-section-title">从单邮箱分析到批量踢人，把审计动作做成可执行面板。</h2>
+              <p class="page-section-text">排查账号归属、成员状态、推荐工作区、邀请历史和批量清理动作。</p>
+            </div>
+          </div>
+
+          <div class="audit-console-grid">
+            <div class="audit-console-main">
+              <div class="panel">
+                <div class="panel-header">
+                  <h2>单邮箱审计与候选推荐</h2>
+                </div>
+                <div class="panel-body">
+                  <div class="toolbar workspace-subtoolbar workspace-subtoolbar-stretch">
+                    <div class="toolbar-left toolbar-left-grow">
+                      <div class="search-box search-box-wide">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" placeholder="输入要审计的邮箱" id="audit-email-input">
+                      </div>
+                    </div>
+                    <div class="toolbar-right">
+                      <button class="btn btn-secondary btn-tone-blue" id="btn-open-batch-audit">批量邮箱审计</button>
+                      <button class="btn btn-primary" id="btn-run-audit">开始审计</button>
+                    </div>
+                  </div>
+                  <div class="toolbar workspace-subtoolbar audit-filter-toolbar">
+                    <div class="toolbar-left">
+                      <div class="filter-group">
+                        <select id="audit-recommendation-filter" class="select-input">
+                          <option value="all">全部推荐状态</option>
+                          <option value="available">可邀请</option>
+                          <option value="pending">待接受</option>
+                          <option value="member">已在团内</option>
+                          <option value="cooldown">冷却中</option>
+                          <option value="full">已满</option>
+                        </select>
+                      </div>
+                      <div class="filter-group">
+                        <select id="audit-presence-filter" class="select-input">
+                          <option value="all">全部存在状态</option>
+                          <option value="member">仅成员</option>
+                          <option value="pending">仅待邀请</option>
+                        </select>
+                      </div>
+                      <div class="filter-group">
+                        <select id="audit-history-filter" class="select-input">
+                          <option value="all">全部历史状态</option>
+                          <option value="member">远端已成成员</option>
+                          <option value="pending">远端待接受</option>
+                          <option value="missing">远端未找到</option>
+                          <option value="accepted">本地已接受</option>
+                          <option value="sent">本地已发送</option>
+                          <option value="error">本地错误</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="toolbar-right">
+                      <button class="btn btn-secondary btn-tone-danger" id="btn-audit-bulk-remove" disabled>批量踢人</button>
+                      <button class="btn btn-ghost" id="btn-clear-audit">清空结果</button>
+                    </div>
+                  </div>
+                  <div class="dashboard-grid-2 section-spacer-top">
+                    <div class="panel">
+                      <div class="panel-header">
+                        <h2>候选工作区推荐</h2>
+                      </div>
+                      <div class="panel-body">
+                        <div class="accounts-table-wrapper">
+                          <table class="accounts-table hidden" id="audit-recommendation-table">
+                            <thead>
+                            <tr>
+                              <th>工作区</th>
+                              <th>账号</th>
+                              <th>健康</th>
+                              <th>状态</th>
+                              <th>预占剩余</th>
+                              <th>操作</th>
+                            </tr>
+                          </thead>
+                            <tbody id="audit-recommendation-tbody"></tbody>
+                          </table>
+                          <div class="empty-state" id="audit-recommendation-empty">
+                            <p>输入邮箱后显示推荐结果</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="panel">
+                      <div class="panel-header">
+                        <h2>当前成员 / 待邀请</h2>
+                      </div>
+                      <div class="panel-body">
+                        <div id="audit-presence-list" class="audit-presence-list">
+                          <div class="empty-state"><p>暂无数据</p></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="panel section-spacer-top">
+                    <div class="panel-header">
+                      <h2>邀请历史</h2>
+                    </div>
+                    <div class="panel-body">
+                      <div class="accounts-table-wrapper">
+                        <table class="accounts-table hidden" id="audit-history-table">
+                          <thead>
+                            <tr>
+                              <th>账号</th>
+                              <th>工作区</th>
+                              <th>状态</th>
+                              <th>远端状态</th>
+                              <th>时间</th>
+                            </tr>
+                          </thead>
+                          <tbody id="audit-history-tbody"></tbody>
+                        </table>
+                        <div class="empty-state" id="audit-history-empty">
+                          <p>暂无邀请历史</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <aside class="audit-console-side">
+              <div id="audit-summary" class="audit-summary-grid"></div>
+            </aside>
+          </div>
+        </div>
+
+        <div class="page hidden" id="page-member-cleanup">
+          <div class="page-section-head page-section-head-inline">
+            <div>
+              <span class="page-section-kicker">Member Cleanup Console</span>
+              <h2 class="page-section-title">按日期筛成员和待邀请，勾选后直接踢人或撤销。</h2>
+              <p class="page-section-text">集中查看所有工作区成员与待邀请，支持加入日期展示、按天筛选、批量踢人和待邀请撤销。</p>
+            </div>
+          </div>
+
+          <div class="audit-console-grid">
+            <div class="audit-console-main">
+              <div class="panel">
+                <div class="panel-header">
+                  <h2>成员 / 待邀请清理</h2>
+                </div>
+                <div class="panel-body">
+                  <div class="toolbar workspace-subtoolbar workspace-subtoolbar-stretch">
+                    <div class="toolbar-left toolbar-left-grow">
+                      <div class="search-box search-box-wide">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" placeholder="搜索邮箱、成员名、账号或工作区" id="member-cleanup-search-input">
+                      </div>
+                    </div>
+                    <div class="toolbar-right member-cleanup-toolbar-actions">
+                      <div class="filter-group">
+                        <select id="member-cleanup-type-filter" class="select-input">
+                          <option value="all">全部类型</option>
+                          <option value="member">只看成员</option>
+                          <option value="pending">只看待邀请</option>
+                        </select>
+                      </div>
+                      <div class="filter-group">
+                        <input type="date" id="member-cleanup-date-filter" class="form-input member-cleanup-date-input">
+                      </div>
+                      <button class="btn btn-ghost" id="btn-reset-member-cleanup">
+                        <span>重置筛选</span>
+                      </button>
+                      <button class="btn btn-secondary" id="btn-refresh-member-cleanup">
+                        <span>刷新列表</span>
+                      </button>
+                      <button class="btn btn-secondary btn-tone-blue" id="btn-sync-member-cleanup">
+                        <span>同步工作区</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="member-cleanup-selection-bar">
+                    <div class="member-cleanup-selection-meta" id="member-cleanup-meta">正在读取成员与待邀请...</div>
+                    <div class="member-table-actions">
+                      <button class="btn btn-secondary" id="btn-member-cleanup-select-all">全选当前筛选</button>
+                      <button class="btn btn-ghost" id="btn-member-cleanup-clear-selection">清空勾选</button>
+                      <button class="btn btn-danger" id="btn-member-cleanup-kick-selected" disabled>一键踢人</button>
+                      <button class="btn btn-secondary btn-tone-orange" id="btn-member-cleanup-revoke-selected" disabled>撤销待邀请</button>
+                    </div>
+                  </div>
+
+                  <div class="accounts-table-wrapper section-spacer-top">
+                    <table class="accounts-table hidden" id="member-cleanup-table">
+                      <thead>
+                        <tr>
+                          <th></th>
+                          <th>类型</th>
+                          <th>邮箱 / 名称</th>
+                          <th>所属账号</th>
+                          <th>工作区</th>
+                          <th>状态</th>
+                          <th>加入 / 邀请时间</th>
+                          <th>操作</th>
+                        </tr>
+                      </thead>
+                      <tbody id="member-cleanup-tbody"></tbody>
+                    </table>
+                    <div class="empty-state" id="member-cleanup-empty">
+                      <p>正在读取成员与待邀请...</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <aside class="audit-console-side">
+              <div class="panel">
+                <div class="panel-header">
+                  <h2>清理概览</h2>
+                </div>
+                <div class="panel-body">
+                  <div class="audit-summary-grid" id="member-cleanup-summary"></div>
+                </div>
+              </div>
+              <div class="panel section-spacer-top">
+                <div class="panel-header">
+                  <h2>使用说明</h2>
+                </div>
+                <div class="panel-body">
+                  <div class="dashboard-alert-item accent">
+                    <div class="dashboard-alert-detail">选择日期后，会按北京时间只显示那一天加入的成员或发出的待邀请。</div>
+                  </div>
+                  <div class="dashboard-alert-item warning section-spacer-top">
+                    <div class="dashboard-alert-detail">所有者会显示出来但不能踢出。待邀请支持单个撤销，也支持批量撤销。</div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        <div class="page hidden" id="page-checkout-tools">
+          <div class="page-section-head page-section-head-inline">
+            <div>
+              <span class="page-section-kicker">Checkout Workspace</span>
+              <h2 class="page-section-title">把解析、结果、历史和协议订阅动作放进一个工作台。</h2>
+              <p class="page-section-text">集中处理 checkout link、卡密、session 与自动订阅结果。</p>
+            </div>
+          </div>
+
+          <div class="checkout-workbench">
+            <div class="checkout-workbench-main">
+              <div class="checkout-tools-grid">
+                <div class="panel">
+                  <div class="panel-header">
+                    <h2>结账链接解析</h2>
+                  </div>
+                  <div class="panel-body">
+                    <div class="form-group">
+                      <label for="checkout-tool-input">结账链接或 cs_id</label>
+                      <input type="text" id="checkout-tool-input" class="form-input" placeholder="https://chatgpt.com/checkout/openai_llc/cs_live_... 或 cs_live_...">
+                    </div>
+                    <div class="form-group form-group-spaced">
+                      <label>代充模式</label>
+                      <select id="checkout-tool-mode" class="select-input">
+                        <option value="api">卡商 API 代充（卡密模式）</option>
+                        <option value="card">手工信用卡直连（支持 3DS 验证）</option>
+                      </select>
+                    </div>
+
+                    <div id="checkout-tool-api-group" class="section-spacer-tight">
+                      <div class="form-group">
+                        <label for="checkout-redeem-code">卡密（必填）</label>
+                        <input type="text" id="checkout-redeem-code" class="form-input" placeholder="XXXX-XXXX-XXXX-XXXX">
+                      </div>
+                    </div>
+
+                    <div id="checkout-tool-card-group" class="hidden checkout-card-group section-spacer-tight">
+                      <div class="form-group">
+                        <label>信用卡号</label>
+                        <input type="text" id="checkout-cc-number" class="form-input" placeholder="4242 4242 4242 4242">
+                      </div>
+                      <div class="split-fields">
+                        <div class="form-group form-group-fill">
+                          <label>过期年月</label>
+                          <input type="text" id="checkout-cc-exp" class="form-input" placeholder="MM/YY 或 MM/YYYY">
+                        </div>
+                        <div class="form-group form-group-fill">
+                          <label>安全码 (CVV/CVC)</label>
+                          <input type="text" id="checkout-cc-cvv" class="form-input" placeholder="123">
+                        </div>
+                      </div>
+                      <div class="form-group form-group-compact">
+                        <label class="toggle-label">
+                          <input type="checkbox" id="checkout-cc-needs-3ds">
+                          <span class="toggle-switch"></span>
+                          <span class="toggle-copy">强制走 3DS 短信验证码通道拦截（如果不勾，将模拟直接扣款成功）</span>
+                        </label>
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <label for="checkout-tool-note">备注（可选）</label>
+                      <input type="text" id="checkout-tool-note" class="form-input" placeholder="例如：给哪个邮箱用，或来源备注">
+                    </div>
+                    <div class="form-group">
+                      <label class="toggle-label">
+                        <input type="checkbox" id="checkout-auto-sub">
+                        <span class="toggle-switch"></span>
+                        <span>解析后自动尝试协议订阅</span>
+                      </label>
+                    </div>
+                    <div class="form-actions">
+                      <button class="btn btn-secondary" id="btn-clear-checkout-tool">清空</button>
+                      <button class="btn btn-primary" id="btn-parse-checkout-tool">解析并保存</button>
+                    </div>
+                    <div class="checkout-tool-hints">
+                      <div class="checkout-tool-hint">只做链接解析、标准化和本地历史记录。</div>
+                      <div class="checkout-tool-hint">不会自动提交支付，也不会生成随机账单地址。</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="panel checkout-result-panel">
+                  <div class="panel-header">
+                    <h2>最近结果</h2>
+                  </div>
+                  <div class="panel-body">
+                    <div id="checkout-tool-result" class="checkout-tool-result">
+                      <div class="empty-state"><p>先解析一条链接或卡密</p></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <aside class="checkout-workbench-side">
+              <div class="panel checkout-side-panel">
+                <div class="panel-header">
+                  <h2>工作台说明</h2>
+                </div>
+                <div class="panel-body">
+                  <div class="dashboard-alert-list">
+                    <div class="dashboard-alert-item accent">
+                      <div class="dashboard-alert-head"><strong>链接解析</strong></div>
+                      <div class="dashboard-alert-detail">适合快速录入 checkout link、cs_id 和卡密，形成统一可追踪的本地记录。</div>
+                    </div>
+                    <div class="dashboard-alert-item warning">
+                      <div class="dashboard-alert-head"><strong>协议订阅</strong></div>
+                      <div class="dashboard-alert-detail">解析保存后可以立即从历史记录触发协议订阅，并持续观察状态变化。</div>
+                    </div>
+                    <div class="dashboard-alert-item accent">
+                      <div class="dashboard-alert-head"><strong>历史回看</strong></div>
+                      <div class="dashboard-alert-detail">下面的流水记录区适合反复复制 session、打开链接、追踪备注与来源。</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
+
+          <div class="panel section-spacer-top">
+            <div class="panel-header">
+              <h2>历史记录</h2>
+            </div>
+            <div class="panel-body">
+              <div class="toolbar workspace-subtoolbar workspace-subtoolbar-stretch">
+                <div class="toolbar-left toolbar-left-grow">
+                  <div class="search-box search-box-wide">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" id="search-checkout-tools-input" placeholder="搜索 session id、链接、卡密或备注">
+                  </div>
+                </div>
+                <div class="toolbar-right">
+                  <button class="btn btn-ghost" id="btn-refresh-checkout-tools">刷新</button>
+                </div>
+              </div>
+              <div id="checkout-tools-summary" class="workspace-summary-grid"></div>
+              <div class="accounts-table-wrapper">
+                <table class="accounts-table hidden" id="checkout-tools-table">
+                  <thead>
+                    <tr>
+                      <th>时间</th>
+                      <th>类型</th>
+                      <th>结果</th>
+                      <th>订阅状态</th>
+                      <th>来源</th>
+                      <th>备注</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="checkout-tools-tbody"></tbody>
+                </table>
+                <div class="empty-state" id="checkout-tools-empty">
+                  <p>还没有结账工具历史记录</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CDK Management Page -->
+        <div class="page hidden" id="page-cdk-manage">
+          <div class="page-section-head page-section-head-inline">
+            <div>
+              <span class="page-section-kicker">CDK Workspace</span>
+              <h2 class="page-section-title">CDK 卡密管理 &mdash; 生成、分发、追踪兑换状态。</h2>
+              <p class="page-section-text">管理 CDK 库存、支付订单、激活任务和售后追踪。购买页：<a href="/buy" target="_blank" style="color:var(--accent-blue)">/buy</a>，Team 激活页：<a href="/join" target="_blank" style="color:var(--accent-blue)">/join</a>，Plus 兑换页：<a href="/redeem" target="_blank" style="color:var(--accent-blue)">/redeem</a></p>
+            </div>
+          </div>
+          <div class="checkout-workbench">
+            <div class="checkout-workbench-main">
+              <div class="checkout-tools-grid">
+                <div class="panel">
+                  <div class="panel-header"><h2>生成 CDK</h2></div>
+                  <div class="panel-body">
+                    <div class="form-group">
+                      <label for="cdk-gen-count">生成数量</label>
+                      <input type="number" id="cdk-gen-count" class="form-input" value="10" min="1" max="100">
+                    </div>
+                    <div class="form-group">
+                      <label for="cdk-gen-plan">套餐类型</label>
+                      <select id="cdk-gen-plan" class="select-input">
+                        <option value="team_invite">Team 邀请</option>
+                        <option value="plus_monthly">Plus 月付</option>
+                        <option value="plus_yearly">Plus 年付</option>
+                        <option value="pro_monthly">Pro 月付</option>
+                      </select>
+                    </div>
+                    <div class="form-actions">
+                      <button class="btn btn-primary" id="btn-cdk-generate">批量生成</button>
+                    </div>
+                    <div id="cdk-gen-result" style="margin-top:1rem"></div>
+                  </div>
+                </div>
+                <div class="panel">
+                  <div class="panel-header"><h2>库存概览</h2></div>
+                  <div class="panel-body">
+                    <div id="cdk-summary" class="workspace-summary-grid"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <aside class="checkout-workbench-side">
+              <div class="panel checkout-side-panel">
+                <div class="panel-header"><h2>快速操作</h2></div>
+                <div class="panel-body">
+                  <div class="dashboard-alert-list">
+                    <div class="dashboard-alert-item accent">
+                      <div class="dashboard-alert-head"><strong>客户页面</strong></div>
+                      <div class="dashboard-alert-detail"><a href="/buy" target="_blank" style="color:var(--accent-blue)">购买页</a> · <a href="/join" target="_blank" style="color:var(--accent-blue)">Team 激活页</a></div>
+                    </div>
+                    <div class="dashboard-alert-item warning">
+                      <div class="dashboard-alert-head"><strong>批量清理</strong></div>
+                      <div class="dashboard-alert-detail">
+                        <button class="btn btn-sm btn-secondary btn-tone-danger" id="btn-cdk-delete-used" style="margin-top:0.5rem">删除已使用 CDK</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
+          <div class="panel section-spacer-top">
+            <div class="panel-header"><h2>售后追踪</h2></div>
+            <div class="panel-body">
+              <div class="toolbar workspace-subtoolbar workspace-subtoolbar-stretch">
+                <div class="toolbar-left toolbar-left-grow">
+                  <div class="search-box search-box-wide">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" id="cdk-trace-input" placeholder="输入订单号、CDK、邮箱或任务 ID">
+                  </div>
+                </div>
+                <div class="toolbar-right">
+                  <button class="btn btn-secondary" id="btn-cdk-trace">追踪</button>
+                </div>
+              </div>
+              <div id="cdk-trace-result" class="dashboard-alert-list"></div>
+            </div>
+          </div>
+          <div class="panel section-spacer-top">
+            <div class="panel-header"><h2>支付订单</h2></div>
+            <div class="panel-body">
+              <div class="accounts-table-wrapper">
+                <table class="accounts-table hidden" id="cdk-orders-table">
+                  <thead>
+                    <tr>
+                      <th>订单号</th>
+                      <th>买家</th>
+                      <th>状态</th>
+                      <th>金额</th>
+                      <th>CDK</th>
+                      <th>时间</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cdk-orders-tbody"></tbody>
+                </table>
+                <div class="empty-state" id="cdk-orders-empty"><p>暂无支付订单</p></div>
+                <div class="pagination" id="cdk-orders-pagination"></div>
+              </div>
+            </div>
+          </div>
+          <div class="panel section-spacer-top">
+            <div class="panel-header"><h2>CDK 列表</h2></div>
+            <div class="panel-body">
+              <div class="toolbar workspace-subtoolbar workspace-subtoolbar-stretch">
+                <div class="toolbar-left toolbar-left-grow">
+                  <div class="search-box search-box-wide">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" id="cdk-search-input" placeholder="搜索卡密或邮箱">
+                  </div>
+                  <div class="filter-group">
+                    <select id="cdk-status-filter" class="select-input">
+                      <option value="all">全部状态</option>
+                      <option value="unused">未使用</option>
+                      <option value="used">已使用</option>
+                      <option value="processing">处理中</option>
+                      <option value="expired">已过期</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="toolbar-right">
+                  <button class="btn btn-ghost" id="btn-refresh-cdk">刷新</button>
+                </div>
+              </div>
+              <div class="accounts-table-wrapper">
+                <table class="accounts-table hidden" id="cdk-table">
+                  <thead>
+                    <tr>
+                      <th>卡密</th>
+                      <th>状态</th>
+                      <th>套餐</th>
+                      <th>使用者</th>
+                      <th>创建时间</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cdk-tbody"></tbody>
+                </table>
+                <div class="empty-state" id="cdk-empty"><p>暂无 CDK，点击 批量生成 开始</p></div>
+                <div class="pagination" id="cdk-pagination"></div>
+              </div>
+            </div>
+          </div>
+          <div class="panel section-spacer-top">
+            <div class="panel-header"><h2>最近兑换任务</h2></div>
+            <div class="panel-body">
+              <div class="accounts-table-wrapper">
+                <table class="accounts-table hidden" id="cdk-tasks-table">
+                  <thead>
+                    <tr>
+                      <th>任务 ID</th>
+                      <th>CDK</th>
+                      <th>账号</th>
+                      <th>状态</th>
+                      <th>信息</th>
+                      <th>时间</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cdk-tasks-tbody"></tbody>
+                </table>
+                <div class="empty-state" id="cdk-tasks-empty"><p>暂无兑换任务</p></div>
+                <div class="pagination" id="cdk-tasks-pagination"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Settings Page -->
+        <div class="page hidden" id="page-settings">
+          <div class="page-section-head page-section-head-inline">
+            <div>
+              <span class="page-section-kicker">System Preferences</span>
+              <h2 class="page-section-title">设置</h2>
+              <p class="page-section-text">维护通知、调度和日常运行参数。</p>
+            </div>
+          </div>
+          <div class="settings-grid settings-grid-compact">
+            <div class="panel compact-panel">
+              <div class="panel-header">
+                <h2>Telegram 通知</h2>
+              </div>
+              <div class="panel-body">
+                <div class="form-group">
+                  <label for="tg-bot-token">Bot Token</label>
+                  <input type="password" id="tg-bot-token" class="form-input" placeholder="由 @BotFather 获取">
+                </div>
+                <div class="form-group">
+                  <label for="tg-chat-id">Chat ID</label>
+                  <input type="text" id="tg-chat-id" class="form-input" placeholder="你的 Telegram Chat ID">
+                </div>
+                <div class="form-group">
+                  <label class="toggle-label">
+                    <input type="checkbox" id="alerts-enabled" checked>
+                    <span class="toggle-switch"></span>
+                    <span>启用告警通知</span>
+                  </label>
+                </div>
+                <div class="form-actions compact-form-actions">
+                  <button class="btn btn-secondary" id="btn-test-telegram">发送测试消息</button>
+                  <button class="btn btn-primary" id="btn-save-telegram">保存</button>
+                </div>
+              </div>
+            </div>
+            <div class="panel compact-panel">
+              <div class="panel-header">
+                <h2>检查调度</h2>
+              </div>
+              <div class="panel-body">
+                <div class="form-group">
+                  <label for="check-interval">检查间隔（分钟）</label>
+                  <input type="number" id="check-interval" class="form-input" min="5" max="1440" value="30">
+                </div>
+                <div class="form-group">
+                  <label for="invite-cooldown">邀请冷却（分钟）</label>
+                  <input type="number" id="invite-cooldown" class="form-input" min="0" max="1440" value="5">
+                </div>
+                <div class="form-group">
+                  <label class="toggle-label">
+                    <input type="checkbox" id="daily-summary-enabled" checked>
+                    <span class="toggle-switch"></span>
+                    <span>每日摘要通知</span>
+                  </label>
+                </div>
+                <div class="form-group">
+                  <label for="daily-summary-hour">每日摘要发送时间</label>
+                  <select id="daily-summary-hour" class="select-input">
+                    <option value="6">06:00</option>
+                    <option value="7">07:00</option>
+                    <option value="8">08:00</option>
+                    <option value="9" selected>09:00</option>
+                    <option value="10">10:00</option>
+                    <option value="12">12:00</option>
+                    <option value="18">18:00</option>
+                    <option value="21">21:00</option>
+                  </select>
+                </div>
+                <div class="form-actions compact-form-actions">
+                  <button class="btn btn-primary" id="btn-save-schedule">保存</button>
+                </div>
+              </div>
+            </div>
+            <div class="panel compact-panel">
+              <div class="panel-header">
+                <h2>公网隧道</h2>
+              </div>
+              <div class="panel-body">
+                <div class="form-group">
+                  <label class="toggle-label">
+                    <input type="checkbox" id="public-tunnel-enabled" checked>
+                    <span class="toggle-switch"></span>
+                    <span>启用公网访问</span>
+                  </label>
+                </div>
+                <div class="form-group">
+                  <label>当前状态</label>
+                  <div class="surface-chip-row">
+                    <span class="quota-sync-badge success" id="public-tunnel-status">已开启</span>
+                  </div>
+                </div>
+                <p class="text-muted text-sm section-note-compact" id="public-tunnel-note">
+                  关闭后 https://www.penqda.com/buy 会显示维护中，localhost:3000 不受影响。
+                </p>
+                <div class="form-actions compact-form-actions">
+                  <button class="btn btn-primary" id="btn-save-public-tunnel">保存</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modals -->
+  <div class="modal-overlay hidden" id="modal-overlay">
+    <div class="modal" id="modal">
+      <div class="modal-header">
+        <h3 id="modal-title">添加账号</h3>
+        <button class="modal-close" id="modal-close">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-body">
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/components.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
+

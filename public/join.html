@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>激活 Team CDK</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+      color: #172033;
+      background: #f4f7fb;
+    }
+    .topbar {
+      min-height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: inherit;
+      text-decoration: none;
+      font-weight: 800;
+      font-size: 18px;
+    }
+    .brand svg { width: 32px; height: 32px; }
+    .topbar a.link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      padding: 0 12px;
+      border: 1px solid rgba(37, 99, 235, 0.16);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.72);
+      color: #1d4ed8;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 14px;
+      transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+    }
+    .topbar a.link:hover {
+      background: #fff;
+      border-color: rgba(37, 99, 235, 0.34);
+      transform: translateY(-1px);
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+    .qq-contact-popover {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      padding: 0 14px;
+      border: 1px solid #d8e3ff;
+      border-radius: 10px;
+      background: #ffffff;
+      color: #13253f;
+      box-shadow: 0 12px 28px rgba(19, 37, 63, 0.12);
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      line-height: 1;
+    }
+    .qq-contact-popover.show {
+      display: inline-flex;
+    }
+    .wrap {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 0.88fr) minmax(360px, 1.12fr);
+      gap: 20px;
+      align-items: stretch;
+    }
+    .visual {
+      border-radius: 8px;
+      min-height: 540px;
+      background: #12273f;
+      color: white;
+      padding: 32px;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .visual::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0)),
+        radial-gradient(circle at 24% 22%, rgba(45, 108, 223, 0.4), transparent 28%),
+        radial-gradient(circle at 76% 70%, rgba(20, 184, 166, 0.32), transparent 32%);
+      pointer-events: none;
+    }
+    .visual > * { position: relative; }
+    .badge {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid rgba(255,255,255,0.22);
+      border-radius: 999px;
+      padding: 7px 10px;
+      color: rgba(255,255,255,0.86);
+      font-weight: 800;
+      font-size: 13px;
+    }
+    .visual h1 {
+      margin: 32px 0 12px;
+      font-size: 42px;
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+    .visual p {
+      margin: 0;
+      max-width: 460px;
+      color: rgba(255,255,255,0.76);
+      font-size: 16px;
+    }
+    .steps {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-top: 30px;
+    }
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.06);
+    }
+    .step span {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #5de1a6;
+      color: #0d3124;
+      font-weight: 900;
+      flex: 0 0 auto;
+    }
+    .step b { display: block; }
+    .step small { color: rgba(255,255,255,0.66); }
+    .panel {
+      background: white;
+      border: 1px solid #e3e8f1;
+      border-radius: 8px;
+      box-shadow: 0 18px 40px rgba(19, 37, 63, 0.08);
+      padding: 24px;
+    }
+    .panel h2 {
+      margin: 0 0 18px;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+    .field { margin-bottom: 18px; }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 800;
+      font-size: 14px;
+      color: #25324a;
+    }
+    input {
+      width: 100%;
+      height: 46px;
+      border: 1px solid #cfd8e8;
+      border-radius: 8px;
+      padding: 0 14px;
+      font: inherit;
+      color: #172033;
+      outline: none;
+      background: #fbfcff;
+    }
+    input:focus {
+      border-color: #2d6cdf;
+      box-shadow: 0 0 0 3px rgba(45, 108, 223, 0.12);
+    }
+    .inline-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+    }
+    button, .button-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 44px;
+      border-radius: 8px;
+      border: 0;
+      padding: 0 16px;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .primary {
+      color: white;
+      background: #2563eb;
+    }
+    .secondary {
+      color: #214066;
+      background: #edf3fb;
+      border: 1px solid #d6e0ee;
+    }
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .message {
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #d6e0ee;
+      background: #f8fbff;
+      color: #52627a;
+      display: none;
+      overflow-wrap: anywhere;
+    }
+    .message.show { display: block; }
+    .message.success {
+      border-color: #a7e4c5;
+      background: #ecfdf4;
+      color: #075e39;
+    }
+    .message.error {
+      border-color: #f1b3b3;
+      background: #fff1f1;
+      color: #8f1b1b;
+    }
+    .result-card {
+      margin-top: 18px;
+      border: 1px solid #e3e8f1;
+      border-radius: 8px;
+      background: #fbfcff;
+      padding: 16px;
+      display: none;
+    }
+    .result-card.show { display: block; }
+    .result-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 8px 0;
+      border-bottom: 1px solid #edf1f7;
+      color: #52627a;
+      font-size: 14px;
+    }
+    .result-row:last-child { border-bottom: 0; }
+    .result-row strong {
+      color: #172033;
+      text-align: right;
+      overflow-wrap: anywhere;
+    }
+    textarea {
+      width: 100%;
+      min-height: 154px;
+      border: 1px solid #cfd8e8;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font: inherit;
+      color: #172033;
+      outline: none;
+      background: #fbfcff;
+      resize: vertical;
+      line-height: 1.55;
+    }
+    textarea:focus {
+      border-color: #2d6cdf;
+      box-shadow: 0 0 0 3px rgba(45, 108, 223, 0.12);
+    }
+    .panel-separator {
+      height: 1px;
+      margin: 24px 0;
+      background: #edf1f7;
+    }
+    .hint {
+      margin: 0 0 14px;
+      color: #52627a;
+      font-size: 13px;
+      line-height: 1.65;
+    }
+    .batch-input-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .batch-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .batch-result-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .batch-result-item {
+      border: 1px solid #e3e8f1;
+      border-radius: 8px;
+      background: #fbfcff;
+      padding: 12px 14px;
+    }
+    .batch-result-item.pending {
+      border-color: #d6e0ee;
+      background: #fbfcff;
+    }
+    .batch-result-item.success {
+      border-color: #a7e4c5;
+      background: #ecfdf4;
+    }
+    .batch-result-item.failed {
+      border-color: #f1b3b3;
+      background: #fff1f1;
+    }
+    .batch-result-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+      font-weight: 800;
+      color: #25324a;
+    }
+    .batch-result-meta {
+      display: grid;
+      gap: 6px;
+      color: #52627a;
+      font-size: 13px;
+    }
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 72px;
+      min-height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .status-chip.pending {
+      background: #edf3fb;
+      color: #214066;
+    }
+    .status-chip.success {
+      background: #dcfce7;
+      color: #166534;
+    }
+    .status-chip.failed {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    @media (max-width: 860px) {
+      .hero { grid-template-columns: 1fr; }
+      .visual { min-height: auto; }
+      .visual h1 { font-size: 32px; }
+      .inline-actions { grid-template-columns: 1fr; }
+      .batch-input-grid { grid-template-columns: 1fr; }
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+        justify-content: center;
+        padding-top: 14px;
+        padding-bottom: 14px;
+      }
+      .nav-links { justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/join" aria-label="Team CDK">
+      <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <rect width="48" height="48" rx="8" fill="#12273F"/>
+        <path d="M15 24H33M26 17L33 24L26 31" stroke="#5DE1A6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M13 12H35C36.6569 12 38 13.3431 38 15V33C38 34.6569 36.6569 36 35 36H13C11.3431 36 10 34.6569 10 33V15C10 13.3431 11.3431 12 13 12Z" stroke="white" stroke-width="3"/>
+      </svg>
+      <span>Team CDK</span>
+    </a>
+    <nav class="nav-links" aria-label="页面导航">
+      <a class="link" href="/buy">购买 CDK</a>
+      <a class="link" href="https://t.me/ZC_PJF" target="_blank" rel="noopener">TG 联系</a>
+      <a class="link" href="https://wpa.qq.com/msgrd?v=3&amp;uin=1006267937&amp;site=qq&amp;menu=yes" target="_blank" rel="noopener">QQ 联系</a>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <div class="visual">
+        <div>
+          <span class="badge">CDK 激活</span>
+          <h1>输入 CDK 和邮箱，接收 Team 邀请</h1>
+          <p>激活成功后，请打开 ChatGPT 账号邮箱，接受 Team 邀请即可加入。</p>
+        </div>
+        <div class="steps">
+          <div class="step"><span>1</span><div><b>校验 CDK</b><small>确认卡密未使用。</small></div></div>
+          <div class="step"><span>2</span><div><b>填写邮箱</b><small>使用要加入 Team 的 ChatGPT 邮箱。</small></div></div>
+          <div class="step"><span>3</span><div><b>等待邀请</b><small>后台自动选择可用名额发送邀请。</small></div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>激活 CDK</h2>
+        <div class="message" id="inventory-message"></div>
+        <form id="join-form">
+          <div class="field">
+            <label for="cdk-input">CDK 卡密</label>
+            <div class="inline-actions">
+              <input id="cdk-input" type="text" placeholder="TEAM-XXXX-XXXX-XXXX-XXXX" autocomplete="off" required>
+              <button class="secondary" type="button" id="btn-verify">验证</button>
+            </div>
+            <div class="message" id="cdk-message"></div>
+          </div>
+          <div class="field">
+            <label for="email-input">ChatGPT 邮箱</label>
+            <input id="email-input" type="email" placeholder="name@example.com" autocomplete="email" required>
+          </div>
+          <button class="primary" type="submit" id="btn-submit" disabled>提交激活</button>
+        </form>
+
+        <div class="message" id="result-message"></div>
+
+        <div class="result-card" id="task-card">
+          <div class="result-row"><span>任务号</span><strong id="task-id">--</strong></div>
+          <div class="result-row"><span>邮箱</span><strong id="task-email">--</strong></div>
+          <div class="result-row"><span>状态</span><strong id="task-state">--</strong></div>
+        </div>
+        <div class="panel-separator"></div>
+
+        <h2>批量激活</h2>
+        <p class="hint">左边填 CDK，右边填邮箱，按行一一对应。系统会逐条创建 Team 邀请任务，并在下方显示每条进度。</p>
+        <div class="batch-input-grid">
+          <div class="field">
+            <label for="batch-cdk-input">CDK 列表</label>
+            <textarea id="batch-cdk-input" placeholder="TEAM-XXXX-XXXX-XXXX-XXXX&#10;TEAM-YYYY-YYYY-YYYY-YYYY"></textarea>
+          </div>
+          <div class="field">
+            <label for="batch-email-input">邮箱列表</label>
+            <textarea id="batch-email-input" placeholder="name1@example.com&#10;name2@example.com"></textarea>
+          </div>
+        </div>
+        <div class="batch-actions">
+          <button class="secondary" type="button" id="btn-batch-verify">验证批量 CDK</button>
+          <button class="primary" type="button" id="btn-batch-submit" disabled>批量激活</button>
+        </div>
+
+        <div class="message" id="batch-verify-message"></div>
+        <div class="message" id="batch-message"></div>
+
+        <div class="result-card" id="batch-card">
+          <div class="result-row"><span>批量结果</span><strong id="batch-summary">--</strong></div>
+          <div class="batch-result-list" id="batch-result-list"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const cdkInput = document.getElementById('cdk-input');
+    const emailInput = document.getElementById('email-input');
+    const verifyBtn = document.getElementById('btn-verify');
+    const submitBtn = document.getElementById('btn-submit');
+    const cdkMessage = document.getElementById('cdk-message');
+    const resultMessage = document.getElementById('result-message');
+    const taskCard = document.getElementById('task-card');
+    let cdkVerified = false;
+    let pollTimer = null;
+
+    cdkInput.value = params.get('cdk') || '';
+    emailInput.value = params.get('email') || '';
+
+    function showMessage(el, type, text) {
+      el.className = `message show ${type || ''}`;
+      el.textContent = text;
+    }
+
+    function hideMessage(el) {
+      el.className = 'message';
+      el.textContent = '';
+    }
+
+    function setSubmitState() {
+      submitBtn.disabled = !cdkVerified;
+    }
+
+    async function request(url, options = {}) {
+      const res = await fetch(url, {
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+        ...options,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.msg || data.error || `HTTP ${res.status}`);
+      }
+      return data;
+    }
+
+    verifyBtn.onclick = async () => {
+      const cardCode = cdkInput.value.trim();
+      if (!cardCode) {
+        showMessage(cdkMessage, 'error', '请输入 CDK 卡密');
+        return;
+      }
+
+      verifyBtn.disabled = true;
+      verifyBtn.textContent = '验证中...';
+      hideMessage(cdkMessage);
+
+      try {
+        const data = await request('/api/cdk/verify', {
+          method: 'POST',
+          body: JSON.stringify({ cardCode }),
+        });
+        if (!data.valid) {
+          cdkVerified = false;
+          showMessage(cdkMessage, 'error', data.message || 'CDK 不可用');
+        } else if (String(data.planType || '').includes('plus') || String(data.planType || '').includes('pro')) {
+          cdkVerified = false;
+          showMessage(cdkMessage, 'error', '该 CDK 是 Plus/Pro 充值卡，不能用于 Team 邀请');
+        } else {
+          cdkVerified = true;
+          showMessage(cdkMessage, 'success', 'CDK 可用，请填写要加入 Team 的邮箱');
+        }
+      } catch (err) {
+        cdkVerified = false;
+        showMessage(cdkMessage, 'error', err.message);
+      } finally {
+        verifyBtn.disabled = false;
+        verifyBtn.textContent = '验证';
+        setSubmitState();
+      }
+    };
+
+    document.getElementById('join-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      hideMessage(resultMessage);
+      submitBtn.disabled = true;
+      submitBtn.textContent = '提交中...';
+
+      try {
+        const data = await request('/api/cdk/submit-team', {
+          method: 'POST',
+          body: JSON.stringify({
+            cardCode: cdkInput.value.trim(),
+            email: emailInput.value.trim(),
+          }),
+        });
+
+        showTask(data.data, emailInput.value.trim(), '排队中');
+        showMessage(resultMessage, '', '任务已提交，正在发送邀请...');
+        pollTask(data.data, data.taskToken || '');
+      } catch (err) {
+        showMessage(resultMessage, 'error', err.message);
+        submitBtn.disabled = false;
+      } finally {
+        submitBtn.textContent = '提交激活';
+      }
+    });
+
+    function showTask(taskId, email, state) {
+      taskCard.classList.add('show');
+      document.getElementById('task-id').textContent = taskId || '--';
+      document.getElementById('task-email').textContent = email || '--';
+      document.getElementById('task-state').textContent = state || '--';
+    }
+
+    function pollTask(taskId, taskToken) {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(async () => {
+        try {
+          const qs = taskToken ? `?token=${encodeURIComponent(taskToken)}` : '';
+          const data = await request(`/api/cdk/query/${encodeURIComponent(taskId)}${qs}`);
+          const state = data.taskStatus || '';
+          showTask(taskId, data.accountEmail || emailInput.value.trim(), data.statusMessage || state);
+          if (state === 'SUCCESS') {
+            clearInterval(pollTimer);
+            showMessage(resultMessage, 'success', data.statusMessage || '邀请已发送，请检查邮箱');
+          } else if (state === 'FAILED') {
+            clearInterval(pollTimer);
+            showMessage(resultMessage, 'error', data.errorMessage || data.statusMessage || '邀请失败');
+            submitBtn.disabled = false;
+          }
+        } catch {}
+      }, 2500);
+    }
+
+  </script>
+  <script>
+    (() => {
+      const originalForm = document.getElementById('join-form');
+      if (!originalForm) return;
+
+      const cdkValue = document.getElementById('cdk-input')?.value || '';
+      const emailValue = document.getElementById('email-input')?.value || '';
+      const cleanForm = originalForm.cloneNode(true);
+      originalForm.replaceWith(cleanForm);
+
+      const cdkInput = document.getElementById('cdk-input');
+      const emailInput = document.getElementById('email-input');
+      const verifyBtn = document.getElementById('btn-verify');
+      const submitBtn = document.getElementById('btn-submit');
+      const cdkMessage = document.getElementById('cdk-message');
+      const inventoryMessage = document.getElementById('inventory-message');
+      const resultMessage = document.getElementById('result-message');
+      const taskCard = document.getElementById('task-card');
+      const batchCdkInput = document.getElementById('batch-cdk-input');
+      const batchEmailInput = document.getElementById('batch-email-input');
+      const batchVerifyBtn = document.getElementById('btn-batch-verify');
+      const batchBtn = document.getElementById('btn-batch-submit');
+      const batchVerifyMessage = document.getElementById('batch-verify-message');
+      const batchMessage = document.getElementById('batch-message');
+      const batchCard = document.getElementById('batch-card');
+      const batchSummary = document.getElementById('batch-summary');
+      const batchResultList = document.getElementById('batch-result-list');
+
+      let cdkVerified = false;
+      let pollTimer = null;
+      let batchPollTimer = null;
+      let batchResults = [];
+      let batchVerified = false;
+      let batchVerifiedSignature = '';
+      let currentInventoryStats = null;
+
+      const qqContactLink = document.querySelector('a[href*="wpa.qq.com"]');
+      if (qqContactLink) {
+        qqContactLink.href = '#';
+        qqContactLink.removeAttribute('target');
+        qqContactLink.removeAttribute('rel');
+
+        const qqContactPopover = document.createElement('span');
+        qqContactPopover.className = 'qq-contact-popover';
+        qqContactPopover.textContent = '1006267937';
+        qqContactLink.insertAdjacentElement('afterend', qqContactPopover);
+
+        const hideQqContact = () => {
+          qqContactPopover.classList.remove('show');
+        };
+
+        qqContactLink.addEventListener('click', (event) => {
+          event.preventDefault();
+          qqContactPopover.classList.toggle('show');
+        });
+
+        document.addEventListener('click', (event) => {
+          if (event.target !== qqContactLink && !qqContactPopover.contains(event.target)) {
+            hideQqContact();
+          }
+        });
+
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') {
+            hideQqContact();
+          }
+        });
+      }
+
+      cdkInput.value = cdkValue;
+      emailInput.value = emailValue;
+
+      function escapeHtml(value) {
+        return String(value || '').replace(/[&<>"']/g, char => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;',
+        }[char]));
+      }
+
+      function showMessage(el, type, text) {
+        if (!el) return;
+        el.className = `message show ${type || ''}`;
+        el.textContent = text;
+      }
+
+      function hideMessage(el) {
+        if (!el) return;
+        el.className = 'message';
+        el.textContent = '';
+      }
+
+      function setSubmitState() {
+        submitBtn.disabled = !cdkVerified;
+      }
+
+      function setBatchSubmitState() {
+        batchBtn.disabled = !batchVerified;
+      }
+
+      function getEmailValidationMessage(input) {
+        if (!input) return '';
+        if (input.validity.valueMissing) {
+          return '请输入 ChatGPT 邮箱';
+        }
+        if (input.validity.typeMismatch || input.validity.patternMismatch || input.validity.badInput) {
+          return '请输入正确的邮箱地址，例如 name@example.com';
+        }
+        return '';
+      }
+
+      function bindLocalizedEmailValidity(input) {
+        if (!input) return;
+
+        const syncValidityMessage = () => {
+          input.setCustomValidity(getEmailValidationMessage(input));
+        };
+
+        input.addEventListener('invalid', syncValidityMessage);
+        input.addEventListener('input', () => {
+          input.setCustomValidity('');
+        });
+        input.addEventListener('blur', syncValidityMessage);
+      }
+
+      async function request(url, options = {}) {
+        const res = await fetch(url, {
+          headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+          ...options,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.msg || data.error || `HTTP ${res.status}`);
+        }
+        return data;
+      }
+
+      function renderInventoryNotice(stats = currentInventoryStats) {
+        if (!inventoryMessage || !stats) return;
+
+        const stock = Number(stats.stockCount || 0);
+        showMessage(
+          inventoryMessage,
+          stock <= 0 ? 'error' : '',
+          `当前库存数量：${Math.max(0, stock)}`
+        );
+      }
+
+      async function refreshInventoryNotice() {
+        try {
+          currentInventoryStats = await request('/api/payments/product');
+          renderInventoryNotice(currentInventoryStats);
+        } catch {}
+      }
+
+      function getVerifyOutcome(data) {
+        const planType = String(data.planType || '').toLowerCase();
+        if (!data.valid) {
+          return {
+            ok: false,
+            text: data.message || 'CDK 不可用',
+          };
+        }
+
+        if (planType.includes('plus') || planType.includes('pro')) {
+          return {
+            ok: false,
+            text: '该 CDK 是 Plus/Pro 充值卡，不支持 Team 邀请兑换',
+          };
+        }
+
+        if (data.activationAllowed === false) {
+          return {
+            ok: false,
+            text: data.inventoryMessage || data.message || '当前无库存，暂时无法激活此 CDK，请稍后再试',
+          };
+        }
+
+        if (data.reservationActive && Number(data.stockCount || 0) <= 0) {
+          return {
+            ok: true,
+            text: data.message || 'CDK 可用，当前前台库存已用完，但这张 CDK 仍在保留期内，可以继续激活',
+          };
+        }
+
+        const stock = Number(data.stockCount || 0);
+        return {
+          ok: true,
+          text: stock > 0
+            ? `CDK 可用，当前可激活库存 ${stock} 个`
+            : (data.message || 'CDK 可用，请填写邮箱'),
+        };
+      }
+
+      function showTask(taskId, email, state) {
+        taskCard.classList.add('show');
+        document.getElementById('task-id').textContent = taskId || '--';
+        document.getElementById('task-email').textContent = email || '--';
+        document.getElementById('task-state').textContent = state || '--';
+      }
+
+      function parseBatchColumns(cardText, emailText) {
+        const cardLines = String(cardText || '').split(/\r?\n/).map(line => line.trim());
+        const emailLines = String(emailText || '').split(/\r?\n/).map(line => line.trim());
+        const maxLength = Math.max(cardLines.length, emailLines.length);
+        const items = [];
+
+        for (let index = 0; index < maxLength; index += 1) {
+          const cardCode = cardLines[index] || '';
+          const email = emailLines[index] || '';
+          if (!cardCode && !email) {
+            continue;
+          }
+
+          items.push({
+            lineNumber: index + 1,
+            cardCode,
+            email,
+          });
+        }
+
+        return items;
+      }
+
+      function parseBatchCdkLines(cardText) {
+        return String(cardText || '')
+          .split(/\r?\n/)
+          .map((line, index) => ({
+            lineNumber: index + 1,
+            cardCode: line.trim().toUpperCase(),
+          }))
+          .filter(item => item.cardCode);
+      }
+
+      function resetBatchVerification({ clearMessage = true } = {}) {
+        batchVerified = false;
+        batchVerifiedSignature = '';
+        setBatchSubmitState();
+        if (clearMessage) {
+          hideMessage(batchVerifyMessage);
+        }
+      }
+
+      function batchStatusTone(status) {
+        if (status === 'SUCCESS') return 'success';
+        if (status === 'FAILED') return 'failed';
+        return 'pending';
+      }
+
+      function batchStatusLabel(status) {
+        if (status === 'SUCCESS') return '成功';
+        if (status === 'FAILED') return '失败';
+        if (status === 'PENDING') return '排队中';
+        return '处理中';
+      }
+
+      function renderBatchResults() {
+        if (!batchResults.length) {
+          batchCard.classList.remove('show');
+          batchSummary.textContent = '--';
+          batchResultList.innerHTML = '';
+          return;
+        }
+
+        const successCount = batchResults.filter(item => item.status === 'SUCCESS').length;
+        const failedCount = batchResults.filter(item => item.status === 'FAILED').length;
+        const pendingCount = batchResults.length - successCount - failedCount;
+
+        batchCard.classList.add('show');
+        batchSummary.textContent = `成功 ${successCount} / 失败 ${failedCount} / 处理中 ${pendingCount}`;
+        batchResultList.innerHTML = batchResults.map(item => {
+          const tone = batchStatusTone(item.status);
+          return `
+            <div class="batch-result-item ${tone}">
+              <div class="batch-result-head">
+                <span>第 ${item.lineNumber} 条</span>
+                <span class="status-chip ${tone}">${batchStatusLabel(item.status)}</span>
+              </div>
+              <div class="batch-result-meta">
+                <span>CDK: <code>${escapeHtml(item.cardCode || '-')}</code></span>
+                <span>邮箱: <strong>${escapeHtml(item.email || '-')}</strong></span>
+                ${item.taskId ? `<span>任务: <code>${escapeHtml(item.taskId)}</code></span>` : ''}
+                <span>${escapeHtml(item.message || '')}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      function finalizeBatchMessage() {
+        const successCount = batchResults.filter(item => item.status === 'SUCCESS').length;
+        const failedCount = batchResults.filter(item => item.status === 'FAILED').length;
+        if (failedCount > 0) {
+          showMessage(batchMessage, 'error', `批量处理完成，成功 ${successCount} 条，失败 ${failedCount} 条`);
+        } else if (successCount > 0) {
+          showMessage(batchMessage, 'success', `批量处理完成，成功 ${successCount} 条`);
+        }
+      }
+
+      async function pollBatchTasks() {
+        const pendingItems = batchResults.filter(item => item.taskId && item.status !== 'SUCCESS' && item.status !== 'FAILED');
+        if (!pendingItems.length) {
+          if (batchPollTimer) {
+            clearInterval(batchPollTimer);
+            batchPollTimer = null;
+          }
+          finalizeBatchMessage();
+          await refreshInventoryNotice();
+          return;
+        }
+
+        await Promise.all(pendingItems.map(async item => {
+          try {
+            const qs = item.taskToken ? `?token=${encodeURIComponent(item.taskToken)}` : '';
+            const data = await request(`/api/cdk/query/${encodeURIComponent(item.taskId)}${qs}`);
+            item.status = data.taskStatus || item.status;
+            item.email = data.accountEmail || item.email;
+            item.message = data.errorMessage || data.statusMessage || item.message;
+          } catch {}
+        }));
+
+        renderBatchResults();
+
+        const stillPending = batchResults.some(item => item.taskId && item.status !== 'SUCCESS' && item.status !== 'FAILED');
+        if (!stillPending) {
+          if (batchPollTimer) {
+            clearInterval(batchPollTimer);
+            batchPollTimer = null;
+          }
+          finalizeBatchMessage();
+          await refreshInventoryNotice();
+        }
+      }
+
+      function startBatchPolling() {
+        if (batchPollTimer) {
+          clearInterval(batchPollTimer);
+        }
+        batchPollTimer = setInterval(() => {
+          pollBatchTasks().catch(() => {});
+        }, 2500);
+      }
+
+      async function runVerify() {
+        const cardCode = cdkInput.value.trim();
+        if (!cardCode) {
+          showMessage(cdkMessage, 'error', '请输入 CDK 卡密');
+          return;
+        }
+
+        verifyBtn.disabled = true;
+        verifyBtn.textContent = '验证中...';
+        hideMessage(cdkMessage);
+
+        try {
+          const data = await request('/api/cdk/verify', {
+            method: 'POST',
+            body: JSON.stringify({ cardCode }),
+          });
+          const outcome = getVerifyOutcome(data);
+          cdkVerified = outcome.ok;
+          showMessage(cdkMessage, outcome.ok ? 'success' : 'error', outcome.text);
+        } catch (err) {
+          cdkVerified = false;
+          showMessage(cdkMessage, 'error', err.message);
+        } finally {
+          await refreshInventoryNotice();
+          verifyBtn.disabled = false;
+          verifyBtn.textContent = '验证';
+          setSubmitState();
+        }
+      }
+
+      verifyBtn.addEventListener('click', () => {
+        runVerify().catch(() => {});
+      });
+
+      cdkInput.addEventListener('input', () => {
+        cdkVerified = false;
+        setSubmitState();
+        hideMessage(cdkMessage);
+      });
+
+      bindLocalizedEmailValidity(emailInput);
+
+      batchCdkInput?.addEventListener('input', () => {
+        resetBatchVerification();
+        hideMessage(batchMessage);
+      });
+
+      batchEmailInput?.addEventListener('input', () => {
+        hideMessage(batchMessage);
+      });
+
+      batchVerifyBtn?.addEventListener('click', async () => {
+        hideMessage(batchMessage);
+        hideMessage(batchVerifyMessage);
+
+        const cdkItems = parseBatchCdkLines(batchCdkInput.value);
+        if (!cdkItems.length) {
+          showMessage(batchVerifyMessage, 'error', '请先填写批量 CDK 列表');
+          resetBatchVerification({ clearMessage: false });
+          return;
+        }
+
+        if (cdkItems.length > 50) {
+          showMessage(batchVerifyMessage, 'error', '单次最多验证 50 条 CDK');
+          resetBatchVerification({ clearMessage: false });
+          return;
+        }
+
+        const duplicateCount = new Map();
+        cdkItems.forEach(item => {
+          duplicateCount.set(item.cardCode, (duplicateCount.get(item.cardCode) || 0) + 1);
+        });
+
+        batchVerifyBtn.disabled = true;
+        batchVerifyBtn.textContent = '验证中...';
+
+        try {
+          const verifyResults = await Promise.all(cdkItems.map(async item => {
+            if ((duplicateCount.get(item.cardCode) || 0) > 1) {
+              return {
+                ...item,
+                valid: false,
+                message: '批量列表中存在重复 CDK',
+              };
+            }
+
+            try {
+              const data = await request('/api/cdk/verify', {
+                method: 'POST',
+                body: JSON.stringify({ cardCode: item.cardCode }),
+              });
+              const outcome = getVerifyOutcome(data);
+
+              return {
+                ...item,
+                valid: outcome.ok,
+                message: outcome.ok ? '可用' : outcome.text,
+              };
+            } catch (err) {
+              return {
+                ...item,
+                valid: false,
+                message: err.message,
+              };
+            }
+          }));
+
+          const invalidItems = verifyResults.filter(item => !item.valid);
+          if (invalidItems.length) {
+            const preview = invalidItems
+              .slice(0, 5)
+              .map(item => `第 ${item.lineNumber} 行: ${item.message}`)
+              .join('；');
+            resetBatchVerification({ clearMessage: false });
+            showMessage(
+              batchVerifyMessage,
+              'error',
+              `批量验证失败，共 ${invalidItems.length} 条不可用。${preview}${invalidItems.length > 5 ? '；其余请分批处理' : ''}`
+            );
+            return;
+          }
+
+          batchVerified = true;
+          batchVerifiedSignature = batchCdkInput.value;
+          setBatchSubmitState();
+          showMessage(batchVerifyMessage, 'success', `已验证 ${verifyResults.length} 条 CDK，均可用于 Team 邀请`);
+        } finally {
+          await refreshInventoryNotice();
+          batchVerifyBtn.disabled = false;
+          batchVerifyBtn.textContent = '验证批量 CDK';
+        }
+      });
+
+      cleanForm.addEventListener('submit', async event => {
+        event.preventDefault();
+        hideMessage(resultMessage);
+        submitBtn.disabled = true;
+        submitBtn.textContent = '提交中...';
+
+        try {
+          const data = await request('/api/cdk/submit-team', {
+            method: 'POST',
+            body: JSON.stringify({
+              cardCode: cdkInput.value.trim(),
+              email: emailInput.value.trim(),
+            }),
+          });
+
+          showTask(data.data, emailInput.value.trim(), '排队中');
+          showMessage(resultMessage, '', '任务已提交，正在发送邀请...');
+          await refreshInventoryNotice();
+          pollTask(data.data, data.taskToken || '');
+        } catch (err) {
+          showMessage(resultMessage, 'error', err.message);
+          await refreshInventoryNotice();
+          submitBtn.disabled = false;
+        } finally {
+          submitBtn.textContent = '提交激活';
+        }
+      });
+
+      function pollTask(taskId, taskToken) {
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = setInterval(async () => {
+          try {
+            const qs = taskToken ? `?token=${encodeURIComponent(taskToken)}` : '';
+            const data = await request(`/api/cdk/query/${encodeURIComponent(taskId)}${qs}`);
+            const state = data.taskStatus || '';
+            showTask(taskId, data.accountEmail || emailInput.value.trim(), data.statusMessage || state);
+            if (state === 'SUCCESS') {
+              clearInterval(pollTimer);
+              pollTimer = null;
+              showMessage(resultMessage, 'success', data.statusMessage || '邀请已发送，请检查邮箱');
+              refreshInventoryNotice().catch(() => {});
+              submitBtn.disabled = false;
+            } else if (state === 'FAILED') {
+              clearInterval(pollTimer);
+              pollTimer = null;
+              showMessage(resultMessage, 'error', data.errorMessage || data.statusMessage || '邀请失败');
+              refreshInventoryNotice().catch(() => {});
+              submitBtn.disabled = false;
+            }
+          } catch {}
+        }, 2500);
+      }
+
+      batchBtn?.addEventListener('click', async () => {
+        hideMessage(batchMessage);
+        if (batchPollTimer) {
+          clearInterval(batchPollTimer);
+          batchPollTimer = null;
+        }
+
+        if (!batchVerified || batchVerifiedSignature !== batchCdkInput.value) {
+          showMessage(batchMessage, 'error', '请先点击“验证批量 CDK”并通过校验');
+          return;
+        }
+
+        const parsedItems = parseBatchColumns(batchCdkInput.value, batchEmailInput.value);
+        if (!parsedItems.length) {
+          showMessage(batchMessage, 'error', '请先填写批量 CDK 和邮箱');
+          return;
+        }
+
+        if (parsedItems.length > 50) {
+          showMessage(batchMessage, 'error', '单次最多批量激活 50 条');
+          return;
+        }
+
+        const invalidLines = parsedItems.filter(item => !item.cardCode || !item.email).map(item => item.lineNumber);
+        if (invalidLines.length) {
+          showMessage(batchMessage, 'error', `第 ${invalidLines.join(', ')} 行没有成对的 CDK 和邮箱`);
+          return;
+        }
+
+        batchBtn.disabled = true;
+        batchBtn.textContent = '提交中...';
+        batchResults = [];
+        renderBatchResults();
+
+        try {
+          const data = await request('/api/cdk/submit-team-batch', {
+            method: 'POST',
+            body: JSON.stringify({
+              items: parsedItems.map(item => ({
+                cardCode: item.cardCode,
+                email: item.email,
+              })),
+            }),
+          });
+
+          batchResults = [
+            ...(data.tasks || []).map(item => ({
+              lineNumber: item.lineNumber,
+              cardCode: item.cardCode,
+              email: item.email,
+              taskId: item.taskId,
+              taskToken: item.taskToken,
+              status: 'PENDING',
+              message: '任务已提交，等待处理',
+            })),
+            ...(data.errors || []).map(item => ({
+              lineNumber: item.lineNumber,
+              cardCode: item.cardCode,
+              email: item.email,
+              taskId: '',
+              taskToken: '',
+              status: 'FAILED',
+              message: item.message,
+            })),
+          ].sort((left, right) => left.lineNumber - right.lineNumber);
+
+          renderBatchResults();
+
+          const queuedCount = batchResults.filter(item => Boolean(item.taskId)).length;
+          const failedCount = batchResults.filter(item => item.status === 'FAILED').length;
+
+          if (!queuedCount) {
+            showMessage(batchMessage, 'error', data.msg || '没有可提交的批量任务');
+            return;
+          }
+
+          const queuedText = failedCount
+            ? `已提交 ${queuedCount} 条任务，${failedCount} 条提交失败，正在处理中...`
+            : `已提交 ${queuedCount} 条任务，正在处理中...`;
+          showMessage(batchMessage, failedCount ? 'error' : '', queuedText);
+
+          await refreshInventoryNotice();
+          await pollBatchTasks();
+          if (batchResults.some(item => item.taskId && item.status !== 'SUCCESS' && item.status !== 'FAILED')) {
+            startBatchPolling();
+          }
+        } catch (err) {
+          showMessage(batchMessage, 'error', err.message);
+          await refreshInventoryNotice();
+        } finally {
+          resetBatchVerification({ clearMessage: false });
+          batchBtn.disabled = false;
+          batchBtn.textContent = '批量激活';
+        }
+      });
+
+      setBatchSubmitState();
+      renderBatchResults();
+      refreshInventoryNotice();
+
+      if (cdkInput.value) {
+        runVerify().catch(() => {});
+      }
+    })();
+  </script>
+</body>
+</html>

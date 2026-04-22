@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="ChatGPT Plus CDK 兑换平台 - 安全极速的账号储值服务">
+  <title>兑换 ChatGPT CDK</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f0f4f8;
+      --bg-card: #ffffff;
+      --bg-card-hover: #f8fafc;
+      --text: #1a202c;
+      --text-secondary: #64748b;
+      --text-muted: #94a3b8;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-light: #dbeafe;
+      --success: #059669;
+      --success-bg: #d1fae5;
+      --success-border: #6ee7b7;
+      --error: #dc2626;
+      --error-bg: #fee2e2;
+      --error-border: #fca5a5;
+      --warning: #d97706;
+      --warning-bg: #fef3c7;
+      --border: #e2e8f0;
+      --border-focus: #93c5fd;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+      --shadow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
+      --shadow-lg: 0 10px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.04);
+      --radius: 12px;
+      --radius-sm: 8px;
+      --radius-lg: 16px;
+    }
+
+    [data-theme="dark"] {
+      --bg: #0f172a;
+      --bg-card: #1e293b;
+      --bg-card-hover: #334155;
+      --text: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --primary: #3b82f6;
+      --primary-hover: #60a5fa;
+      --primary-light: #1e3a5f;
+      --success: #10b981;
+      --success-bg: #064e3b;
+      --success-border: #059669;
+      --error: #ef4444;
+      --error-bg: #450a0a;
+      --error-border: #dc2626;
+      --border: #334155;
+      --border-focus: #60a5fa;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+      --shadow: 0 4px 6px rgba(0,0,0,0.3);
+      --shadow-lg: 0 10px 25px rgba(0,0,0,0.4);
+    }
+
+    body {
+      font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+      line-height: 1.6;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 720px;
+    }
+
+    /* Header */
+    .hero {
+      text-align: center;
+      padding: 2.5rem 2rem;
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      margin-bottom: 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #2563eb, #7c3aed, #ec4899);
+    }
+    .hero h1 {
+      font-size: 1.75rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.5rem;
+    }
+    .hero p {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+    }
+    .theme-toggle {
+      position: absolute;
+      top: 1.25rem;
+      right: 1.25rem;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1.5rem;
+      opacity: 0.6;
+      transition: opacity 0.2s;
+    }
+    .theme-toggle:hover { opacity: 1; }
+
+    /* Card panels */
+    .card {
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.75rem;
+      margin-bottom: 1.5rem;
+      transition: box-shadow 0.2s;
+    }
+    .card:hover {
+      box-shadow: var(--shadow-lg);
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .card-title .icon {
+      width: 24px;
+      height: 24px;
+      color: var(--primary);
+    }
+
+    /* Guide section */
+    .guide {
+      padding: 1.5rem 1.75rem;
+    }
+    .guide-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .guide-step {
+      padding: 0.75rem 0;
+      padding-left: 1.25rem;
+      border-left: 3px solid var(--primary);
+      margin-bottom: 0.75rem;
+    }
+    .guide-step h4 {
+      font-weight: 600;
+      color: var(--primary);
+      font-size: 0.95rem;
+      margin-bottom: 0.25rem;
+    }
+    .guide-step p {
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+    }
+    .guide-step .btn-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      margin-top: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.2s;
+    }
+    .guide-step .btn-link:hover { background: var(--primary-hover); }
+
+    .guide-note {
+      padding: 0.75rem 1.25rem;
+      border-left: 3px solid var(--warning);
+      margin-top: 0.5rem;
+    }
+    .guide-note h4 {
+      font-weight: 600;
+      color: var(--warning);
+      font-size: 0.9rem;
+    }
+    .guide-note p {
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+    }
+
+    /* Form elements */
+    .step-section {
+      margin-bottom: 1.75rem;
+    }
+    .step-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+    }
+    .step-num {
+      width: 28px;
+      height: 28px;
+      background: var(--primary);
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .step-num.done {
+      background: var(--success);
+    }
+    .step-check {
+      color: var(--success);
+      font-size: 1.1rem;
+      margin-left: 0.25rem;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 0.75rem;
+    }
+    .input-row input,
+    .input-row textarea {
+      flex: 1;
+      min-width: 0;
+    }
+
+    input[type="text"], textarea {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: 'Inter', 'Noto Sans SC', monospace;
+      font-size: 0.9rem;
+      background: var(--bg-card);
+      color: var(--text);
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+    input:focus, textarea:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
+
+    .input-hint {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      margin-top: 0.375rem;
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 0.625rem 1.25rem;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+    .btn-verify {
+      background: transparent;
+      color: var(--primary);
+      border: 1.5px solid var(--border);
+    }
+    .btn-verify:hover {
+      border-color: var(--primary);
+      background: var(--primary-light);
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      padding: 0.75rem 2rem;
+      font-size: 1rem;
+      border-radius: var(--radius-sm);
+    }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-primary.processing {
+      position: relative;
+    }
+    .btn-primary.processing::after {
+      content: '';
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-left: 0.5rem;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Status messages */
+    .msg {
+      padding: 0.75rem 1rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.9rem;
+      font-weight: 500;
+      margin-top: 0.75rem;
+      display: none;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .msg.show { display: flex; }
+    .msg.success {
+      background: var(--success-bg);
+      color: var(--success);
+      border: 1px solid var(--success-border);
+    }
+    .msg.error {
+      background: var(--error-bg);
+      color: var(--error);
+      border: 1px solid var(--error-border);
+    }
+
+    /* Batch query */
+    .batch-section {
+      padding: 1.75rem;
+    }
+    .batch-title {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .batch-count {
+      color: var(--primary);
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      body { padding: 1rem 0.75rem; }
+      .hero h1 { font-size: 1.35rem; }
+      .card { padding: 1.25rem; }
+      .input-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Hero -->
+    <div class="hero">
+      <button class="theme-toggle" id="theme-toggle" title="切换主题">🌙</button>
+      <h1>兑换 ChatGPT CDK</h1>
+      <p>安全极速的账号储值服务</p>
+    </div>
+
+    <!-- Guide -->
+    <div class="card guide">
+      <div class="guide-title">
+        <svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        操作指南
+      </div>
+      <div class="guide-step">
+        <h4>步骤1：输入 CDK 并验证</h4>
+        <p>确保 CDK 有效且是正确的商品</p>
+      </div>
+      <div class="guide-step">
+        <h4>步骤2：登录 ChatGPT</h4>
+        <p>打开并登录 ChatGPT</p>
+        <a class="btn-link" href="https://chatgpt.com" target="_blank" rel="noopener">打开 ChatGPT</a>
+      </div>
+      <div class="guide-step">
+        <h4>步骤3：获取账号 AuthSession 信息</h4>
+        <p>打开网页并复制完整的JSON数据，点击校验。</p>
+        <a class="btn-link" href="https://chatgpt.com/api/auth/session" target="_blank" rel="noopener">打开 AuthSession 页面</a>
+      </div>
+      <div class="guide-step">
+        <h4>步骤4：验证成功后，点击充值按钮完成充值</h4>
+        <p>充值过程可能漫长，请耐心等待！</p>
+      </div>
+      <div class="guide-note">
+        <h4>注意：充值延迟问题</h4>
+        <p>尝试多次刷新ChatGPT网页，网页会自己再刷新一次更新订阅状态。</p>
+      </div>
+    </div>
+
+    <!-- CDK Redemption -->
+    <div class="card" id="redemption-card">
+      <div class="card-title">
+        <svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        CDK 兑换
+      </div>
+
+      <!-- Step 1: CDK -->
+      <div class="step-section" id="step1-section">
+        <div class="step-label">
+          <span class="step-num" id="step1-num">1</span>
+          输入 CDK 卡密
+          <span class="step-check" id="step1-check" style="display:none">✓</span>
+        </div>
+        <div class="input-row">
+          <input type="text" id="cdk-input" placeholder="XXXXXXXXXXXXXXXX / XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX" />
+          <button class="btn btn-verify" id="btn-verify-cdk">验证</button>
+        </div>
+        <p class="input-hint">输入完请点击验证按钮。</p>
+        <div class="msg" id="cdk-msg"></div>
+      </div>
+
+      <!-- Step 2: AuthSession -->
+      <div class="step-section" id="step2-section">
+        <div class="step-label">
+          <span class="step-num" id="step2-num">2</span>
+          输入账号 AuthSession 信息
+          <span class="step-check" id="step2-check" style="display:none">✓</span>
+        </div>
+        <div class="input-row">
+          <textarea id="session-input" placeholder='{"user":{"id":"user-xxxxx","email":"xxx@xx.com"...}}'></textarea>
+          <button class="btn btn-verify" id="btn-verify-session">验证</button>
+        </div>
+        <p class="input-hint">输入完请点击验证按钮。</p>
+        <div class="msg" id="session-msg"></div>
+      </div>
+
+      <!-- Submit -->
+      <button class="btn btn-primary" id="btn-submit" disabled>开始充值</button>
+      
+      <!-- Result -->
+      <div class="msg" id="result-msg"></div>
+    </div>
+
+    <!-- Batch Query -->
+    <div class="card batch-section">
+      <div class="batch-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        批量查询卡密
+      </div>
+      <textarea id="batch-input" placeholder="每行一个卡密，支持批量查询状态"></textarea>
+      <div class="batch-count" id="batch-count">0 个卡密</div>
+      <div style="margin-top:0.75rem">
+        <button class="btn btn-verify" id="btn-batch-query">开始查询</button>
+      </div>
+      <div id="batch-results" style="margin-top:1rem"></div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      © 2026 CDK 储值系统. 保留所有权利.
+    </div>
+  </div>
+
+  <script>
+    // Theme toggle
+    const themeBtn = document.getElementById('theme-toggle');
+    let dark = localStorage.getItem('cdk-theme') === 'dark';
+    function applyTheme() {
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      themeBtn.textContent = dark ? '☀️' : '🌙';
+    }
+    applyTheme();
+    themeBtn.onclick = () => { dark = !dark; localStorage.setItem('cdk-theme', dark ? 'dark' : 'light'); applyTheme(); };
+
+    // State
+    let cdkVerified = false;
+    let sessionVerified = false;
+    let sessionEmail = '';
+    let isSubmitting = false;
+    let pollTimer = null;
+
+    const API_BASE = window.location.origin + '/api/cdk';
+
+    function showMsg(id, type, text) {
+      const el = document.getElementById(id);
+      el.className = `msg show ${type}`;
+      el.innerHTML = (type === 'success' ? '✅ ' : '❌ ') + text;
+    }
+    function hideMsg(id) {
+      document.getElementById(id).className = 'msg';
+    }
+    function updateSubmitBtn() {
+      const btn = document.getElementById('btn-submit');
+      btn.disabled = !(cdkVerified && sessionVerified) || isSubmitting;
+    }
+
+    // Step 1: Verify CDK
+    document.getElementById('btn-verify-cdk').onclick = async () => {
+      const code = document.getElementById('cdk-input').value.trim();
+      if (!code) return showMsg('cdk-msg', 'error', '请输入卡密');
+      hideMsg('cdk-msg');
+      
+      try {
+        const res = await fetch(`${API_BASE}/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cardCode: code })
+        });
+        const data = await res.json();
+
+        if (data.valid) {
+          cdkVerified = true;
+          showMsg('cdk-msg', 'success', '<strong>验证通过：</strong>CDK 有效，请继续填写账号信息。');
+          document.getElementById('step1-num').classList.add('done');
+          document.getElementById('step1-check').style.display = 'inline';
+        } else {
+          cdkVerified = false;
+          showMsg('cdk-msg', 'error', `<strong>验证失败：</strong>${data.message}`);
+        }
+      } catch (e) {
+        showMsg('cdk-msg', 'error', `网络错误: ${e.message}`);
+      }
+      updateSubmitBtn();
+    };
+
+    // Step 2: Verify Session
+    document.getElementById('btn-verify-session').onclick = () => {
+      const raw = document.getElementById('session-input').value.trim();
+      if (!raw) return showMsg('session-msg', 'error', '请粘贴 AuthSession JSON');
+      hideMsg('session-msg');
+
+      try {
+        const data = JSON.parse(raw);
+        const email = data.user?.email || data.email || '';
+        const token = data.accessToken || data.access_token;
+
+        if (!token) {
+          return showMsg('session-msg', 'error', 'JSON 中未找到 accessToken，请确保复制了完整内容');
+        }
+
+        sessionEmail = email;
+        sessionVerified = true;
+        showMsg('session-msg', 'success', `<strong>验证通过：</strong>账号 ${email || '(未知邮箱)'} 已确认。`);
+        document.getElementById('step2-num').classList.add('done');
+        document.getElementById('step2-check').style.display = 'inline';
+      } catch (e) {
+        sessionVerified = false;
+        showMsg('session-msg', 'error', 'JSON 格式错误，请检查是否完整复制');
+      }
+      updateSubmitBtn();
+    };
+
+    // Submit
+    document.getElementById('btn-submit').onclick = async () => {
+      if (isSubmitting) return;
+      isSubmitting = true;
+
+      const btn = document.getElementById('btn-submit');
+      btn.classList.add('processing');
+      btn.textContent = '处理中...';
+      updateSubmitBtn();
+      hideMsg('result-msg');
+
+      const code = document.getElementById('cdk-input').value.trim();
+      const session = document.getElementById('session-input').value.trim();
+
+      try {
+        const res = await fetch(`${API_BASE}/submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cardCode: code, tokenContent: session })
+        });
+        const data = await res.json();
+
+        if (data.code === 200 && data.data) {
+          // Start polling
+          pollTaskStatus(data.data);
+        } else {
+          throw new Error(data.msg || '提交失败');
+        }
+      } catch (e) {
+        showMsg('result-msg', 'error', `提交失败: ${e.message}`);
+        resetSubmitBtn();
+      }
+    };
+
+    function pollTaskStatus(taskId) {
+      let count = 0;
+      const maxPolls = 120; // 4 minutes max
+
+      pollTimer = setInterval(async () => {
+        count++;
+        const btn = document.getElementById('btn-submit');
+        btn.innerHTML = `处理中(${count})...`;
+        btn.classList.add('processing');
+
+        try {
+          const res = await fetch(`${API_BASE}/query/${taskId}`);
+          const data = await res.json();
+
+          if (data.taskStatus === 'SUCCESS') {
+            clearInterval(pollTimer);
+            showMsg('result-msg', 'success', `<strong>充值成功 🎉</strong><br>${data.statusMessage}`);
+            resetSubmitBtn();
+          } else if (data.taskStatus === 'FAILED') {
+            clearInterval(pollTimer);
+            showMsg('result-msg', 'error', `<strong>充值失败</strong><br>${data.errorMessage || data.statusMessage}`);
+            resetSubmitBtn();
+          }
+          // else: still PROCESSING, continue polling
+        } catch (e) {
+          // Network error, keep trying
+        }
+
+        if (count >= maxPolls) {
+          clearInterval(pollTimer);
+          showMsg('result-msg', 'error', '处理超时，请稍后查询结果或联系客服');
+          resetSubmitBtn();
+        }
+      }, 2000);
+    }
+
+    function resetSubmitBtn() {
+      isSubmitting = false;
+      const btn = document.getElementById('btn-submit');
+      btn.classList.remove('processing');
+      btn.textContent = '开始充值';
+      updateSubmitBtn();
+    }
+
+    // Batch query
+    document.getElementById('batch-input').oninput = () => {
+      const lines = document.getElementById('batch-input').value.split('\n').filter(l => l.trim());
+      document.getElementById('batch-count').textContent = `${lines.length} 个卡密`;
+    };
+
+    document.getElementById('btn-batch-query').onclick = async () => {
+      const lines = document.getElementById('batch-input').value.split('\n').filter(l => l.trim());
+      if (!lines.length) return;
+
+      const resultsEl = document.getElementById('batch-results');
+      resultsEl.innerHTML = '<p style="color:var(--text-secondary)">查询中...</p>';
+
+      const results = [];
+      for (const code of lines) {
+        try {
+          const res = await fetch(`${API_BASE}/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cardCode: code.trim() })
+          });
+          const data = await res.json();
+          results.push({ code: code.trim(), ...data });
+        } catch (e) {
+          results.push({ code: code.trim(), valid: false, message: '查询失败' });
+        }
+      }
+
+      resultsEl.innerHTML = results.map(r => `
+        <div style="padding:0.5rem 0;border-bottom:1px solid var(--border);font-size:0.85rem;display:flex;justify-content:space-between">
+          <code style="font-weight:600">${r.code}</code>
+          <span style="color:${r.valid ? 'var(--success)' : 'var(--error)'};font-weight:500">${r.message}</span>
+        </div>
+      `).join('');
+    };
+  </script>
+</body>
+</html>

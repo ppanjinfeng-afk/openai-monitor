@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>&#32500;&#25252;&#20013;</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #09111c;
+      --panel: rgba(17, 29, 45, 0.88);
+      --border: rgba(120, 168, 255, 0.18);
+      --text: #f4f8ff;
+      --muted: #a4b4ca;
+      --accent: #7fe7d8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at top, rgba(53, 94, 197, 0.26), transparent 38%),
+        linear-gradient(180deg, #0d1725 0%, var(--bg) 100%);
+      color: var(--text);
+    }
+
+    .card {
+      width: min(560px, 100%);
+      padding: 40px 32px;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background: var(--panel);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+      text-align: center;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(127, 231, 216, 0.28);
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    h1 {
+      margin: 18px 0 12px;
+      font-size: clamp(32px, 5vw, 46px);
+      line-height: 1.08;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.8;
+    }
+
+    .hint {
+      margin-top: 18px;
+      font-size: 14px;
+    }
+
+    .qq {
+      margin-top: 20px;
+      color: var(--text);
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="badge">&#32500;&#25252;&#20013;</div>
+    <h1>&#32500;&#25252;&#20013;</h1>
+    <p>&#20844;&#21578;&#20869;&#23481;&#65306;&#32500;&#25252;&#20013;</p>
+    <div class="qq">QQ&#65306;1006267937</div>
+  </main>
+</body>
+</html>

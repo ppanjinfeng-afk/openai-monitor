@@ -1,0 +1,2468 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>购买 Team CDK</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+      color: #172033;
+      background: #f5f7fb;
+    }
+    .topbar {
+      min-height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: inherit;
+      text-decoration: none;
+      font-weight: 800;
+      font-size: 18px;
+    }
+    .brand svg {
+      width: 32px;
+      height: 32px;
+    }
+    .topbar a.link {
+      color: #2864d8;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+    .qq-contact-popover {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      padding: 0 14px;
+      border: 1px solid #d8e3ff;
+      border-radius: 10px;
+      background: #ffffff;
+      color: #13253f;
+      box-shadow: 0 12px 28px rgba(19, 37, 63, 0.12);
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      line-height: 1;
+    }
+    .qq-contact-popover.show {
+      display: inline-flex;
+    }
+    .wrap {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
+      gap: 20px;
+      align-items: start;
+    }
+    .product {
+      min-height: 560px;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #13253f;
+      color: white;
+      position: relative;
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .product::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 20% 18%, rgba(74, 144, 226, 0.35), transparent 28%),
+        radial-gradient(circle at 82% 62%, rgba(16, 185, 129, 0.28), transparent 30%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0));
+      pointer-events: none;
+    }
+    .product > * { position: relative; }
+    .badge {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid rgba(255,255,255,0.22);
+      padding: 7px 10px;
+      border-radius: 999px;
+      color: rgba(255,255,255,0.86);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .product h1 {
+      margin: 34px 0 12px;
+      font-size: 42px;
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+    .product p {
+      margin: 0;
+      color: rgba(255,255,255,0.76);
+      font-size: 16px;
+      max-width: 460px;
+    }
+    .price {
+      display: flex;
+      align-items: end;
+      gap: 10px;
+      margin-top: 28px;
+    }
+    .price strong {
+      font-size: 40px;
+      line-height: 1;
+    }
+    .price span {
+      color: rgba(255,255,255,0.72);
+      margin-bottom: 4px;
+      font-weight: 700;
+    }
+    .sales-stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 24px;
+      max-width: 360px;
+    }
+    .sales-stat {
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.07);
+      padding: 12px;
+      min-height: 76px;
+    }
+    .sales-stat span {
+      display: block;
+      color: rgba(255,255,255,0.66);
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .sales-stat strong {
+      display: block;
+      color: #ffffff;
+      font-size: 30px;
+      line-height: 1;
+      font-weight: 900;
+      overflow-wrap: anywhere;
+    }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 30px;
+    }
+    .flow div {
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 82px;
+      background: rgba(255,255,255,0.06);
+    }
+    .flow b {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+    .flow span {
+      color: rgba(255,255,255,0.66);
+      font-size: 12px;
+    }
+    .panel {
+      background: white;
+      border: 1px solid #e3e8f1;
+      border-radius: 8px;
+      box-shadow: 0 18px 40px rgba(19, 37, 63, 0.08);
+      padding: 24px;
+    }
+    .panel h2 {
+      margin: 0 0 18px;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+    .field {
+      margin-bottom: 18px;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 800;
+      font-size: 14px;
+      color: #25324a;
+    }
+    input[type="email"],
+    input[type="number"],
+    .email-input-box {
+      width: 100%;
+      height: 46px;
+      border: 1px solid #cfd8e8;
+      border-radius: 8px;
+      padding: 0 14px;
+      font: inherit;
+      color: #172033;
+      outline: none;
+      background: #fbfcff;
+    }
+    input[type="email"]:focus,
+    input[type="number"]:focus,
+    .email-input-box:focus {
+      border-color: #2d6cdf;
+      box-shadow: 0 0 0 3px rgba(45, 108, 223, 0.12);
+    }
+    input[type="number"] {
+      appearance: textfield;
+      -moz-appearance: textfield;
+    }
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    textarea {
+      width: 100%;
+      min-height: 128px;
+      border: 1px solid #cfd8e8;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font: inherit;
+      color: #172033;
+      outline: none;
+      resize: vertical;
+      background: #fbfcff;
+    }
+    textarea:focus {
+      border-color: #2d6cdf;
+      box-shadow: 0 0 0 3px rgba(45, 108, 223, 0.12);
+    }
+    .method-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .method {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 48px;
+      border: 1px solid #cfd8e8;
+      border-radius: 8px;
+      background: #fbfcff;
+      color: #263754;
+      cursor: pointer;
+      font-weight: 800;
+      user-select: none;
+    }
+    .method input { display: none; }
+    .method:has(input:checked) {
+      border-color: #2d6cdf;
+      background: #eaf1ff;
+      color: #1f55b7;
+    }
+    .method svg {
+      width: 18px;
+      height: 18px;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    button, .button-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 44px;
+      border-radius: 8px;
+      border: 0;
+      padding: 0 16px;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .primary {
+      color: white;
+      background: #2563eb;
+    }
+    .secondary {
+      color: #214066;
+      background: #edf3fb;
+      border: 1px solid #d6e0ee;
+    }
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .status {
+      margin-top: 20px;
+      border: 1px solid #e3e8f1;
+      border-radius: 8px;
+      background: #fbfcff;
+      padding: 16px;
+      display: none;
+    }
+    .status.show { display: block; }
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 8px 0;
+      border-bottom: 1px solid #edf1f7;
+      color: #52627a;
+      font-size: 14px;
+    }
+    .status-row:last-child { border-bottom: 0; }
+    .status-row strong {
+      color: #172033;
+      text-align: right;
+      overflow-wrap: anywhere;
+    }
+    .code-box {
+      margin-top: 16px;
+      border: 1px solid #a7e4c5;
+      background: #ecfdf4;
+      border-radius: 8px;
+      padding: 16px;
+      display: none;
+    }
+    .code-box.show { display: block; }
+    .code {
+      display: block;
+      margin-top: 10px;
+      padding: 12px;
+      border-radius: 8px;
+      background: white;
+      border: 1px solid #bfead1;
+      color: #075e39;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 18px;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+    .notice {
+      margin-top: 14px;
+      border-left: 3px solid #e6a100;
+      background: #fff8e8;
+      color: #694a00;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      display: none;
+    }
+    .notice.show { display: block; }
+    .lookup-section {
+      margin-top: 22px;
+      padding-top: 20px;
+      border-top: 1px solid #e3e8f1;
+    }
+    .batch-section {
+      margin-top: 22px;
+      padding-top: 20px;
+      border-top: 1px solid #e3e8f1;
+    }
+    .lookup-section h2 {
+      margin-top: 0;
+    }
+    .batch-section h2 {
+      margin-top: 0;
+    }
+    .field-tip {
+      margin: -4px 0 14px;
+      color: #52627a;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+    .lookup-result {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .batch-result {
+      display: none;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .batch-result.show {
+      display: grid;
+    }
+
+    .batch-code-list {
+      border: 1px solid #b7e6cd;
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 16px;
+      color: #0f172a;
+      font-family: ui-monospace, SFMono-Regular, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.95;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      box-shadow: 0 12px 28px rgba(24, 39, 75, 0.06);
+    }
+    .batch-result-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .batch-summary {
+      border: 1px solid #d6e0ee;
+      border-radius: 8px;
+      background: #f8fbff;
+      padding: 12px 14px;
+      font-size: 14px;
+      font-weight: 800;
+      color: #214066;
+    }
+    .batch-item {
+      border: 1px solid #d6e0ee;
+      border-radius: 8px;
+      background: #fbfcff;
+      padding: 12px;
+    }
+    .batch-item-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+      font-weight: 800;
+    }
+    .batch-item small {
+      display: block;
+      color: #52627a;
+      line-height: 1.7;
+      overflow-wrap: anywhere;
+    }
+    .lookup-item {
+      border: 1px solid #d6e0ee;
+      border-radius: 8px;
+      background: #fbfcff;
+      padding: 12px;
+    }
+    .lookup-item-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+      font-weight: 800;
+    }
+    .lookup-item small {
+      display: block;
+      color: #52627a;
+      line-height: 1.7;
+      overflow-wrap: anywhere;
+    }
+    .lookup-cdk-row {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .lookup-cdk-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .lookup-cdk-label {
+      color: #42526b;
+      font-size: 14px;
+      font-weight: 800;
+    }
+    .lookup-cdk-list {
+      padding: 14px 16px;
+      border: 1px solid #d6e0ee;
+      border-radius: 8px;
+      background: #f8fbff;
+      color: #153053;
+      font-family: ui-monospace, SFMono-Regular, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 17px;
+      font-weight: 800;
+      line-height: 1.95;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .qr-box {
+      display: none;
+      margin-top: 16px;
+      border: 1px solid #d6e0ee;
+      background: #f8fbff;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .qr-box.show { display: block; }
+    .qr-layout {
+      display: grid;
+      grid-template-columns: 180px minmax(0, 1fr);
+      gap: 16px;
+      align-items: center;
+    }
+    .qr-layout img {
+      display: block;
+      width: 180px;
+      height: 180px;
+      object-fit: contain;
+      border-radius: 8px;
+      background: white;
+      border: 1px solid #d6e0ee;
+    }
+    .instruction-list {
+      margin: 0;
+      padding-left: 18px;
+      color: #3f5068;
+      font-size: 14px;
+      line-height: 1.8;
+    }
+    .pay-warning {
+      margin: 0 0 12px;
+      color: #b42318;
+      font-size: 24px;
+      line-height: 1.32;
+      font-weight: 900;
+    }
+    .order-code {
+      display: inline-flex;
+      margin-top: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: white;
+      border: 1px solid #d6e0ee;
+      font-family: Consolas, "Courier New", monospace;
+      font-weight: 800;
+      color: #214066;
+      overflow-wrap: anywhere;
+    }
+    @media (max-width: 860px) {
+      .layout { grid-template-columns: 1fr; }
+      .product { min-height: auto; }
+      .product h1 { font-size: 32px; }
+      .flow { grid-template-columns: 1fr; }
+      .method-grid { grid-template-columns: 1fr; }
+      .qr-layout { grid-template-columns: 1fr; }
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+        justify-content: center;
+        padding-top: 14px;
+        padding-bottom: 14px;
+      }
+      .nav-links { justify-content: flex-start; }
+      .qr-layout img {
+        width: min(100%, 260px);
+        height: auto;
+        justify-self: center;
+      }
+    }
+
+    /* Polished checkout layout */
+    :root {
+      --ink: #142033;
+      --muted: #64748b;
+      --line: #dce5f2;
+      --line-strong: #c7d4e7;
+      --surface: #ffffff;
+      --soft: #f6f9fd;
+      --blue: #2563eb;
+      --blue-dark: #1d4ed8;
+      --green: #0f9f6e;
+      --green-soft: #e9fbf2;
+      --amber: #b7791f;
+      --amber-soft: #fff7e8;
+      --red: #b42318;
+      --red-soft: #fff1f0;
+      --shadow: 0 24px 70px rgba(24, 39, 75, 0.12);
+    }
+
+    body {
+      color: var(--ink);
+      background:
+        linear-gradient(180deg, #eef5ff 0, #f8fbff 290px, #f4f7fb 100%);
+    }
+
+    .topbar {
+      max-width: 1180px;
+      min-height: 76px;
+      padding: 0 24px;
+    }
+
+    .brand {
+      letter-spacing: 0;
+      color: #0f172a;
+    }
+
+    .brand svg {
+      box-shadow: 0 10px 26px rgba(19, 37, 63, 0.18);
+    }
+
+    .topbar a.link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      padding: 0 12px;
+      border: 1px solid rgba(37, 99, 235, 0.16);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.72);
+      color: #1d4ed8;
+      transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+    }
+
+    .topbar a.link:hover {
+      background: #fff;
+      border-color: rgba(37, 99, 235, 0.34);
+      transform: translateY(-1px);
+    }
+
+    .wrap {
+      max-width: 1180px;
+      padding: 18px 24px 48px;
+    }
+
+    .layout {
+      grid-template-columns: minmax(390px, 0.94fr) minmax(0, 1.06fr);
+      gap: 24px;
+      align-items: start;
+    }
+
+    .panel {
+      order: 1;
+      border: 1px solid rgba(148, 163, 184, 0.26);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 28px;
+      background: rgba(255, 255, 255, 0.96);
+    }
+
+    .product {
+      order: 2;
+      min-height: 0;
+      position: sticky;
+      top: 18px;
+      border: 1px solid rgba(20, 32, 51, 0.06);
+      border-radius: 8px;
+      padding: 28px;
+      background:
+        linear-gradient(150deg, rgba(17, 32, 55, 0.98), rgba(19, 53, 78, 0.96)),
+        #13253f;
+      box-shadow: 0 22px 58px rgba(14, 28, 48, 0.22);
+    }
+
+    .product::before {
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(255,255,255,0.06) 1px, transparent 1px);
+      background-size: 42px 42px;
+      opacity: 0.18;
+    }
+
+    .badge {
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.09);
+      border-color: rgba(255, 255, 255, 0.22);
+    }
+
+    .product h1 {
+      margin-top: 24px;
+      font-size: 36px;
+      line-height: 1.14;
+      max-width: 560px;
+    }
+
+    .product p {
+      max-width: 580px;
+      color: rgba(255, 255, 255, 0.78);
+      line-height: 1.72;
+    }
+
+    .price {
+      align-items: center;
+      margin-top: 26px;
+      padding: 18px 0;
+      border-top: 1px solid rgba(255,255,255,0.14);
+      border-bottom: 1px solid rgba(255,255,255,0.14);
+    }
+
+    .price strong {
+      font-size: 46px;
+      letter-spacing: 0;
+    }
+
+    .price span {
+      margin-bottom: 0;
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .sales-stats {
+      max-width: none;
+      margin-top: 18px;
+    }
+
+    .sales-stat {
+      min-height: 86px;
+      border-color: rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .sales-stat span {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .sales-stat strong {
+      font-size: 32px;
+    }
+
+    .flow {
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin-top: 22px;
+    }
+
+    .flow div {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 128px 1fr;
+      align-items: center;
+      gap: 12px;
+      border-color: rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.07);
+    }
+
+    .flow b,
+    .flow span {
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    .panel h2 {
+      font-size: 26px;
+      margin-bottom: 20px;
+      color: #0f172a;
+    }
+
+    .field {
+      margin-bottom: 20px;
+    }
+
+    label {
+      color: #1e293b;
+    }
+
+    input[type="email"],
+    input[type="number"],
+    .email-input-box {
+      height: 52px;
+      border-color: var(--line);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.03);
+    }
+
+    input[type="email"]::placeholder,
+    input[type="number"]::placeholder,
+    .email-input-box::placeholder {
+      color: #94a3b8;
+    }
+
+    input[type="email"]:focus,
+    input[type="number"]:focus,
+    .email-input-box:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.11);
+    }
+
+    .batch-quantity-input {
+      display: block;
+      width: 100%;
+      height: 54px;
+      padding: 0 18px;
+      border: 1px solid rgba(37, 99, 235, 0.22);
+      border-radius: 8px;
+      background: #eef5ff;
+      box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.03);
+      color: var(--blue-dark);
+      font: inherit;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-align: center;
+      outline: none;
+      caret-color: var(--blue);
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: textfield;
+    }
+
+    .batch-quantity-input::placeholder {
+      color: #6a89ba;
+      letter-spacing: 0;
+    }
+
+    .batch-quantity-input:focus {
+      background: #f7faff;
+      border-color: rgba(37, 99, 235, 0.48);
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.11), inset 0 1px 0 rgba(15, 23, 42, 0.03);
+    }
+
+    .batch-quantity-input::-webkit-outer-spin-button,
+    .batch-quantity-input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    .batch-quantity-control {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 52px;
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .batch-quantity-buttons {
+      display: grid;
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .batch-quantity-step {
+      min-height: 0;
+      padding: 0;
+      border: 1px solid rgba(37, 99, 235, 0.22);
+      border-radius: 8px;
+      background: #eef5ff;
+      color: var(--blue-dark);
+      box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.03);
+    }
+
+    .batch-quantity-step:hover:not(:disabled) {
+      transform: none;
+      border-color: rgba(37, 99, 235, 0.48);
+      background: #f7faff;
+    }
+
+    .batch-quantity-step:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .batch-quantity-step svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      stroke-width: 2.2;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .order-quantity-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 150px;
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .order-quantity-control {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) 44px;
+      align-items: stretch;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+      box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.02);
+    }
+
+    .order-quantity-input {
+      width: 100%;
+      min-width: 0;
+      height: 52px;
+      border: 0;
+      border-left: 1px solid var(--line);
+      border-right: 1px solid var(--line);
+      border-radius: 0;
+      padding: 0 16px;
+      background: #fff;
+      color: #0f172a;
+      font: inherit;
+      font-size: 28px;
+      font-weight: 900;
+      text-align: center;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: textfield;
+    }
+
+    .order-quantity-input::placeholder {
+      color: #8aa2c9;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .order-quantity-input::-webkit-outer-spin-button,
+    .order-quantity-input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    .order-quantity-step {
+      min-height: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: #f8fbff;
+      color: #123b7a;
+      font-size: 28px;
+      font-weight: 900;
+      line-height: 1;
+      box-shadow: none;
+    }
+
+    .order-quantity-step:hover:not(:disabled) {
+      transform: none;
+      background: #eef5ff;
+    }
+
+    .order-quantity-step:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .order-total-card {
+      display: grid;
+      align-content: center;
+      gap: 4px;
+      min-height: 52px;
+      padding: 10px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f7fbff;
+      color: #0f172a;
+    }
+
+    .order-total-card span {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .order-total-card strong {
+      font-size: 18px;
+      line-height: 1.2;
+      font-weight: 900;
+      letter-spacing: 0.01em;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 136px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px 14px;
+      font: inherit;
+      color: var(--ink);
+      resize: vertical;
+      outline: none;
+      background: #fbfcff;
+    }
+
+    textarea:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.11);
+    }
+
+    .method-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .method {
+      height: 54px;
+      border-color: var(--line);
+      border-radius: 8px;
+      background: var(--soft);
+      transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+    }
+
+    .method:hover {
+      border-color: var(--line-strong);
+      transform: translateY(-1px);
+    }
+
+    .method:has(input:checked) {
+      border-color: rgba(37, 99, 235, 0.48);
+      background: #eef5ff;
+      color: var(--blue-dark);
+      box-shadow: 0 8px 24px rgba(37, 99, 235, 0.1);
+    }
+
+    button, .button-link {
+      min-height: 48px;
+      border-radius: 8px;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+    }
+
+    button:hover:not(:disabled),
+    .button-link:hover {
+      transform: translateY(-1px);
+    }
+
+    .primary {
+      background: linear-gradient(180deg, #3478ff, var(--blue));
+      box-shadow: 0 12px 28px rgba(37, 99, 235, 0.22);
+    }
+
+    .secondary {
+      color: #1e3a5f;
+      background: #f4f8fd;
+      border-color: var(--line);
+    }
+
+    .status,
+    .qr-box,
+    .code-box,
+    .lookup-item,
+    .batch-item {
+      border-radius: 8px;
+      border-color: var(--line);
+      box-shadow: 0 12px 28px rgba(24, 39, 75, 0.06);
+    }
+
+    .status {
+      background: #fff;
+    }
+
+    .status-row {
+      align-items: center;
+      min-height: 42px;
+      color: var(--muted);
+    }
+
+    .status-row strong {
+      color: #0f172a;
+    }
+
+    .notice {
+      border-left: 0;
+      border: 1px solid #f1d28b;
+      background: var(--amber-soft);
+      color: #7a4d0b;
+      border-radius: 8px;
+      font-weight: 700;
+    }
+
+    .qr-box {
+      padding: 18px;
+      background: linear-gradient(180deg, #f8fbff, #ffffff);
+    }
+
+    .qr-layout {
+      grid-template-columns: 210px minmax(0, 1fr);
+      align-items: start;
+      gap: 20px;
+    }
+
+    .qr-layout img {
+      width: 210px;
+      height: 210px;
+      border: 8px solid #fff;
+      box-shadow: 0 14px 36px rgba(15, 23, 42, 0.12);
+    }
+
+    .qr-layout strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 20px;
+      color: #0f172a;
+    }
+
+    .pay-warning {
+      padding: 12px 14px;
+      border: 1px solid #f4b2ad;
+      border-radius: 8px;
+      background: var(--red-soft);
+      color: var(--red);
+      font-size: 23px;
+    }
+
+    .instruction-list {
+      margin-top: 10px;
+      color: #334155;
+      line-height: 1.9;
+    }
+
+    .order-code {
+      border-color: #c7d4e7;
+      color: #163969;
+      background: #f8fbff;
+    }
+
+    .code-box {
+      border-color: #a7e4c5;
+      background: var(--green-soft);
+    }
+
+    .code {
+      border-color: #b7e6cd;
+      color: #075e39;
+      font-size: 19px;
+    }
+
+    .lookup-section {
+      margin-top: 26px;
+      padding-top: 24px;
+    }
+
+    .batch-section {
+      margin-top: 26px;
+      padding-top: 24px;
+      border-top: 1px solid var(--line);
+    }
+
+    .lookup-section h2 {
+      font-size: 22px;
+      margin-bottom: 16px;
+    }
+
+    .batch-section h2 {
+      font-size: 22px;
+      margin-bottom: 10px;
+    }
+
+    .field-tip {
+      margin: 0 0 14px;
+      color: var(--muted);
+      line-height: 1.8;
+      font-size: 13px;
+    }
+
+    .lookup-item {
+      background: #fff;
+    }
+
+    .batch-result {
+      display: none;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .batch-result.show {
+      display: grid;
+    }
+
+    .batch-summary {
+      padding: 12px 14px;
+      border: 1px solid #d4e1f3;
+      border-radius: 8px;
+      background: #f6f9ff;
+      color: #1f3f66;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .batch-item {
+      background: #fff;
+      padding: 12px;
+    }
+
+    .batch-item-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+      font-weight: 800;
+    }
+
+    .batch-item small {
+      display: block;
+      color: var(--muted);
+      line-height: 1.75;
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 980px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .panel { order: 1; }
+      .product { order: 2; }
+
+      .product {
+        position: relative;
+        top: auto;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .topbar,
+      .wrap {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+
+      .panel,
+      .product {
+        padding: 20px;
+      }
+
+      .product h1 {
+        font-size: 30px;
+      }
+
+      .price strong {
+        font-size: 38px;
+      }
+
+      .sales-stats {
+        grid-template-columns: 1fr;
+      }
+
+      .flow div {
+        grid-template-columns: 1fr;
+      }
+
+      .qr-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .qr-layout img {
+        width: min(100%, 260px);
+        height: auto;
+        justify-self: center;
+      }
+
+      .pay-warning {
+        font-size: 20px;
+      }
+    }
+
+    /* Checkout layout v2: one focused payment flow */
+    .wrap {
+      max-width: 1040px;
+      padding-top: 12px;
+    }
+
+    .layout {
+      grid-template-columns: minmax(0, 900px);
+      justify-content: center;
+      gap: 22px;
+    }
+
+    .panel {
+      width: 100%;
+      max-width: 900px;
+      justify-self: center;
+      padding: 32px;
+    }
+
+    .product {
+      width: 100%;
+      max-width: 900px;
+      justify-self: center;
+      position: relative;
+      top: auto;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(270px, 0.75fr);
+      gap: 24px;
+      align-items: stretch;
+      padding: 24px;
+    }
+
+    .product h1 {
+      margin-top: 18px;
+      font-size: 30px;
+      max-width: 620px;
+    }
+
+    .product p {
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    .price {
+      margin-top: 18px;
+      padding: 14px 0;
+    }
+
+    .price strong {
+      font-size: 36px;
+    }
+
+    .sales-stats {
+      margin-top: 14px;
+      max-width: 420px;
+    }
+
+    .sales-stat {
+      min-height: 72px;
+      padding: 11px 12px;
+    }
+
+    .sales-stat strong {
+      font-size: 26px;
+    }
+
+    .flow {
+      margin-top: 0;
+      align-self: stretch;
+      align-content: stretch;
+      grid-template-columns: 1fr;
+    }
+
+    .flow div {
+      grid-template-columns: 92px 1fr;
+      min-height: 0;
+    }
+
+    .status {
+      margin-top: 20px;
+      padding: 18px 20px;
+    }
+
+    .qr-box {
+      margin-top: 18px;
+      padding: 22px;
+      background: #fff;
+    }
+
+    .qr-layout {
+      grid-template-columns: 250px minmax(0, 1fr);
+      gap: 24px;
+      align-items: start;
+    }
+
+    .qr-layout img {
+      width: 250px;
+      height: 250px;
+      border-radius: 8px;
+    }
+
+    .qr-layout strong {
+      font-size: 24px;
+      margin-bottom: 10px;
+    }
+
+    .pay-warning {
+      font-size: 24px;
+      line-height: 1.45;
+      margin-bottom: 14px;
+    }
+
+    .instruction-list {
+      font-size: 15px;
+      line-height: 1.9;
+    }
+
+    .order-code {
+      font-size: 16px;
+      margin-top: 12px;
+    }
+
+    .lookup-section {
+      margin-top: 28px;
+    }
+
+    @media (max-width: 980px) {
+      .layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .product {
+        grid-template-columns: 1fr;
+      }
+
+      .flow {
+        margin-top: 8px;
+      }
+    }
+
+    @media (max-width: 700px) {
+      .panel,
+      .product {
+        padding: 20px;
+      }
+
+      .qr-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .qr-layout img {
+        width: min(100%, 280px);
+        height: auto;
+        justify-self: center;
+      }
+
+      .pay-warning {
+        font-size: 20px;
+      }
+    }
+
+    /* Checkout layout v3: product left, payment right */
+    .wrap {
+      max-width: 1200px;
+      padding-top: 12px;
+    }
+
+    .layout {
+      grid-template-columns: minmax(320px, 420px) minmax(0, 680px);
+      justify-content: center;
+      align-items: start;
+      gap: 26px;
+    }
+
+    .product {
+      order: 1;
+      width: 100%;
+      max-width: none;
+      position: sticky;
+      top: 18px;
+      display: flex;
+      min-height: 640px;
+      padding: 28px;
+    }
+
+    .panel {
+      order: 2;
+      width: 100%;
+      max-width: none;
+      padding: 30px;
+    }
+
+    .product h1 {
+      font-size: 34px;
+      line-height: 1.13;
+    }
+
+    .product p {
+      font-size: 15px;
+      line-height: 1.72;
+    }
+
+    .price {
+      margin-top: 24px;
+      padding: 18px 0;
+      align-items: flex-end;
+    }
+
+    .price strong {
+      font-size: 40px;
+    }
+
+    .sales-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin-top: 18px;
+    }
+
+    .flow {
+      margin-top: 28px;
+      grid-template-columns: 1fr;
+      align-content: end;
+    }
+
+    .flow div {
+      grid-template-columns: 108px 1fr;
+    }
+
+    .qr-box {
+      padding: 20px;
+    }
+
+    .qr-layout {
+      grid-template-columns: 230px minmax(0, 1fr);
+      gap: 22px;
+    }
+
+    .qr-layout img {
+      width: 230px;
+      height: 230px;
+    }
+
+    .pay-warning {
+      font-size: 22px;
+    }
+
+    @media (max-width: 1080px) {
+      .layout {
+        grid-template-columns: minmax(300px, 380px) minmax(0, 620px);
+        gap: 20px;
+      }
+
+      .product,
+      .panel {
+        padding: 24px;
+      }
+
+      .qr-layout {
+        grid-template-columns: 210px minmax(0, 1fr);
+      }
+
+      .qr-layout img {
+        width: 210px;
+        height: 210px;
+      }
+    }
+
+    @media (max-width: 940px) {
+      .layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .panel {
+        order: 1;
+      }
+
+      .product {
+        order: 2;
+        position: relative;
+        top: auto;
+        min-height: 0;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .order-quantity-row {
+        grid-template-columns: 1fr;
+      }
+
+      .order-total-card {
+        min-height: 0;
+      }
+
+      .qr-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .qr-layout img {
+        width: min(100%, 280px);
+        height: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/buy" aria-label="Team CDK">
+      <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <rect width="48" height="48" rx="8" fill="#13253F"/>
+        <path d="M14 17.5C14 14.4624 16.4624 12 19.5 12H30.5C33.5376 12 36 14.4624 36 17.5V30.5C36 33.5376 33.5376 36 30.5 36H17.5C14.4624 36 12 33.5376 12 30.5V25.5" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+        <path d="M20 24H34M20 24L25 19M20 24L25 29" stroke="#5DE1A6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>Team CDK</span>
+    </a>
+    <nav class="nav-links" aria-label="页面导航">
+      <a class="link" href="/join">已有 CDK，去激活</a>
+      <a class="link" href="https://t.me/ZC_PJF" target="_blank" rel="noopener">TG 联系</a>
+      <a class="link" href="https://wpa.qq.com/msgrd?v=3&amp;uin=1006267937&amp;site=qq&amp;menu=yes" target="_blank" rel="noopener">QQ 联系</a>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <section class="layout">
+      <div class="product">
+        <div>
+          <span class="badge">Team 邀请兑换</span>
+          <h1>购买 CDK，自动获取 Team 邀请资格</h1>
+          <p>2 元起购买。下单后系统会给本单生成专属付款金额，付款确认后自动显示一次性 CDK。</p>
+          <div class="price">
+            <strong id="price-text">--</strong>
+            <span>每个 CDK</span>
+          </div>
+          <div class="sales-stats" aria-label="销售库存">
+            <div class="sales-stat">
+              <span>已售</span>
+              <strong id="sold-count">--</strong>
+            </div>
+            <div class="sales-stat">
+              <span>库存</span>
+              <strong id="stock-count">--</strong>
+            </div>
+          </div>
+        </div>
+        <div class="flow">
+          <div><b>1. 下单支付</b><span>填写接收邮箱并选择支付方式。</span></div>
+          <div><b>2. 到账确认</b><span>付款确认后自动显示 CDK。</span></div>
+          <div><b>3. 邮箱入队</b><span>输入 CDK 与邮箱发送邀请。</span></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>创建订单</h2>
+        <form id="order-form" novalidate>
+          <div class="field">
+            <label for="buyer-email">接收邮箱</label>
+            <input id="buyer-email" class="email-input-box" type="text" inputmode="email" autocomplete="email" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="name@example.com" required>
+          </div>
+          <div class="field">
+            <label for="order-quantity">购买数量</label>
+            <div class="order-quantity-row">
+              <div class="order-quantity-control" aria-label="购买数量调整">
+                <button class="order-quantity-step" type="button" id="order-quantity-down" aria-label="减少数量">-</button>
+                <input id="order-quantity" class="order-quantity-input" type="text" inputmode="numeric" autocomplete="off" enterkeyhint="done" maxlength="2" value="1" placeholder="请输入数量">
+                <button class="order-quantity-step" type="button" id="order-quantity-up" aria-label="增加数量">+</button>
+              </div>
+              <div class="order-total-card" aria-live="polite">
+                <span>基础合计</span>
+                <strong id="order-total-amount">2.00 CNY</strong>
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <label>支付方式</label>
+            <div class="method-grid" id="method-grid">
+              <label class="method">
+                <input type="radio" name="payment_method" value="alipay" checked>
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="2"/><path d="M8 10h8M12 7v10M8 16c3-1 5-3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                支付宝扫码
+              </label>
+              <label class="method" id="mock-method">
+                <input type="radio" name="payment_method" value="mock">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M12 5v14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                本地测试
+              </label>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="primary" type="submit" id="btn-create">提交订单</button>
+            <a class="button-link secondary" href="/join">已有 CDK，去激活</a>
+          </div>
+        </form>
+
+        <div class="notice" id="notice"></div>
+
+        <div class="status" id="order-status">
+          <div class="status-row"><span>订单号</span><strong id="status-order">--</strong></div>
+          <div class="status-row"><span>金额</span><strong id="status-amount">--</strong></div>
+          <div class="status-row"><span>状态</span><strong id="status-state">--</strong></div>
+          <div class="actions" id="pay-actions" style="margin-top:12px"></div>
+        </div>
+
+        <div class="qr-box" id="qr-box">
+          <div class="qr-layout">
+            <img id="pay-qr" src="" alt="支付宝收款二维码">
+            <div>
+              <strong>扫码支付</strong>
+              <p class="pay-warning">付款后请等待一会，别离开这个页面。如果还是没有 CDK，请在上方联系 TG 售后。</p>
+              <ol class="instruction-list" id="payment-instructions"></ol>
+              <code class="order-code" id="order-tail"></code>
+            </div>
+          </div>
+        </div>
+
+        <div class="code-box" id="code-box">
+          <strong>CDK 已生成</strong>
+          <code class="code" id="cdk-code"></code>
+          <div class="actions">
+            <button class="secondary" type="button" id="btn-copy">复制 CDK</button>
+            <a class="button-link primary" id="btn-join" href="/join">去激活</a>
+          </div>
+        </div>
+
+        <div class="batch-result" id="batch-result"></div>
+
+        <div class="lookup-section">
+          <h2>订单找回</h2>
+          <div class="field">
+            <label for="lookup-email">下单邮箱</label>
+            <input id="lookup-email" class="email-input-box" type="text" inputmode="email" autocomplete="email" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="name@example.com">
+          </div>
+          <div class="actions">
+            <button class="secondary" type="button" id="btn-lookup">查询订单</button>
+          </div>
+          <div class="lookup-result" id="lookup-result"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const productPrice = document.getElementById('price-text');
+    const soldCount = document.getElementById('sold-count');
+    const stockCount = document.getElementById('stock-count');
+    const form = document.getElementById('order-form');
+    const notice = document.getElementById('notice');
+    const statusBox = document.getElementById('order-status');
+    const payActions = document.getElementById('pay-actions');
+    const codeBox = document.getElementById('code-box');
+    const codeEl = document.getElementById('cdk-code');
+    const qrBox = document.getElementById('qr-box');
+    const payQr = document.getElementById('pay-qr');
+    const paymentInstructions = document.getElementById('payment-instructions');
+    const orderTail = document.getElementById('order-tail');
+    const copyBtn = document.getElementById('btn-copy');
+    const joinBtn = document.getElementById('btn-join');
+    const buyerEmailInput = document.getElementById('buyer-email');
+    const orderQuantityInput = document.getElementById('order-quantity');
+    const orderQuantityUpBtn = document.getElementById('order-quantity-up');
+    const orderQuantityDownBtn = document.getElementById('order-quantity-down');
+    const orderTotalAmount = document.getElementById('order-total-amount');
+    const mockMethod = document.getElementById('mock-method');
+    const createBtn = document.getElementById('btn-create');
+    const batchResult = document.getElementById('batch-result');
+    const lookupEmail = document.getElementById('lookup-email');
+    const lookupBtn = document.getElementById('btn-lookup');
+    const lookupResult = document.getElementById('lookup-result');
+    let currentOrderNo = '';
+    let currentOrderToken = '';
+    let pollTimer = null;
+    const urlParams = new URLSearchParams(window.location.search);
+    const MIN_ORDER_QUANTITY = 1;
+    const MAX_ORDER_QUANTITY = 20;
+    let availableStockCount = 0;
+    let stockNoticeText = '';
+    let productBaseAmountCents = 200;
+    let productCurrency = 'CNY';
+
+    function normalizeEmailInput(value) {
+      return String(value || '')
+        .trim()
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        .replace(/\u3000/g, ' ')
+        .replace(/[\uFF20\uFE6B]/g, '@')
+        .replace(/[\u3002\uFF0E\uFF61\uFE52]/g, '.')
+        .replace(/\s+/g, '')
+        .toLowerCase();
+    }
+
+    function isValidEmailInput(value) {
+      return Boolean(normalizeEmailInput(value));
+    }
+
+    function syncNormalizedEmailInput(input) {
+      if (!input) return '';
+      const normalized = normalizeEmailInput(input.value);
+      if (normalized !== input.value) {
+        input.value = normalized;
+      }
+      return normalized;
+    }
+
+    function isMobilePaymentBrowser() {
+      const userAgent = navigator.userAgent || '';
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|HarmonyOS|MiuiBrowser|UCBrowser|QQBrowser|MicroMessenger/i.test(userAgent);
+    }
+
+    function getOrderQuantityLimit() {
+      const stockLimit = availableStockCount > 0 ? availableStockCount : MAX_ORDER_QUANTITY;
+      return Math.max(MIN_ORDER_QUANTITY, Math.min(MAX_ORDER_QUANTITY, stockLimit));
+    }
+
+    function getOrderQuantityValue() {
+      return Number.parseInt(orderQuantityInput.value, 10) || MIN_ORDER_QUANTITY;
+    }
+
+    function renderOrderTotal() {
+      const quantity = Math.max(MIN_ORDER_QUANTITY, getOrderQuantityValue());
+      orderTotalAmount.textContent = formatAmountText(productBaseAmountCents * quantity, productCurrency);
+    }
+
+    function updateOrderQuantityButtons() {
+      const current = Math.min(getOrderQuantityLimit(), Math.max(MIN_ORDER_QUANTITY, getOrderQuantityValue()));
+      orderQuantityDownBtn.disabled = current <= MIN_ORDER_QUANTITY;
+      orderQuantityUpBtn.disabled = current >= getOrderQuantityLimit();
+      renderOrderTotal();
+    }
+
+    function setOrderQuantityValue(nextValue) {
+      const normalized = Math.min(
+        getOrderQuantityLimit(),
+        Math.max(MIN_ORDER_QUANTITY, Number.parseInt(nextValue, 10) || MIN_ORDER_QUANTITY)
+      );
+      orderQuantityInput.value = String(normalized);
+      updateOrderQuantityButtons();
+    }
+
+    orderQuantityInput.addEventListener('input', () => {
+      orderQuantityInput.value = orderQuantityInput.value.replace(/[^\d]/g, '').slice(0, 2);
+      updateOrderQuantityButtons();
+    });
+
+    orderQuantityInput.addEventListener('blur', () => {
+      if (!orderQuantityInput.value) {
+        orderQuantityInput.value = String(MIN_ORDER_QUANTITY);
+      }
+      setOrderQuantityValue(orderQuantityInput.value);
+    });
+
+    orderQuantityUpBtn.addEventListener('click', () => {
+      setOrderQuantityValue(getOrderQuantityValue() + 1);
+    });
+
+    orderQuantityDownBtn.addEventListener('click', () => {
+      setOrderQuantityValue(getOrderQuantityValue() - 1);
+    });
+
+    updateOrderQuantityButtons();
+
+    [buyerEmailInput, lookupEmail].forEach(input => {
+      if (!input) return;
+
+      input.addEventListener('blur', () => {
+        syncNormalizedEmailInput(input);
+      });
+
+      input.addEventListener('change', () => {
+        syncNormalizedEmailInput(input);
+      });
+
+      input.addEventListener('paste', () => {
+        requestAnimationFrame(() => {
+          syncNormalizedEmailInput(input);
+        });
+      });
+    });
+
+    function showNotice(text) {
+      notice.textContent = text;
+      notice.classList.toggle('show', Boolean(text));
+    }
+
+    function syncStockUi(product) {
+      availableStockCount = Number(product.stockCount || 0);
+      const soldOut = availableStockCount <= 0;
+      const orderHoldMinutes = Number(product.orderHoldWindowMinutes || 10);
+      const cdkReserveWindowMinutes = Number(product.cdkReserveWindowMinutes || 30);
+      setOrderQuantityValue(Math.min(getOrderQuantityValue(), getOrderQuantityLimit()));
+
+      createBtn.disabled = soldOut;
+      createBtn.textContent = soldOut ? '暂时无库存' : '提交订单';
+
+      stockNoticeText = soldOut
+        ? `当前无库存。待支付订单占位 ${orderHoldMinutes} 分钟，已售 CDK 保留 ${cdkReserveWindowMinutes} 分钟后释放库存。`
+        : String(product.uniqueAmountNote || '');
+
+      showNotice(stockNoticeText);
+    }
+
+    function getMethod() {
+      return document.querySelector('input[name="payment_method"]:checked').value;
+    }
+
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      }[char]));
+    }
+
+    async function request(url, options = {}) {
+      const res = await fetch(url, {
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+        ...options,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      return data;
+    }
+
+    function formatAmountText(amountCents, currency = 'CNY') {
+      return `${(Number(amountCents || 0) / 100).toFixed(2)} ${currency || 'CNY'}`;
+    }
+
+    async function copyText(value) {
+      const text = String(value || '');
+      if (!text) return false;
+
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        return copied;
+      }
+    }
+
+    function attachCopyFeedback(button, text, idleText = '复制全部') {
+      button.addEventListener('click', async () => {
+        const copied = await copyText(text);
+        button.textContent = copied ? '已复制' : '复制失败';
+        setTimeout(() => {
+          button.textContent = idleText;
+        }, 1400);
+      });
+    }
+
+    function getOrderStatusText(order) {
+      const itemCount = Number(order.itemCount || 1);
+      if (order.status === 'delivered') {
+        return itemCount > 1
+          ? `已支付，已发 ${Number(order.deliveredCount || itemCount)} 张卡`
+          : '已支付，已发码';
+      }
+
+      return itemCount > 1 ? `等待支付（共 ${itemCount} 张卡）` : '等待支付';
+    }
+
+    function clearBatchOrder() {
+      batchResult.dataset.orderNo = '';
+      batchResult.classList.remove('show');
+      batchResult.innerHTML = '';
+    }
+
+    function viewOrder(order) {
+      renderOrder(order);
+      if (order.status !== 'delivered') {
+        startPolling(order.orderNo);
+      }
+      statusBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function createOrderPayAction(order, onOrderChange) {
+      if (order.status === 'delivered') {
+        return null;
+      }
+
+      if (order.paymentMethod === 'mock') {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'primary';
+        btn.textContent = '模拟已付款';
+        btn.onclick = async () => {
+          btn.disabled = true;
+          try {
+            const data = await request(`/api/payments/orders/${encodeURIComponent(order.orderNo)}/mock-pay`, { method: 'POST' });
+            onOrderChange(data.order);
+          } catch (err) {
+            showNotice(err.message);
+            btn.disabled = false;
+          }
+        };
+        return btn;
+      }
+
+      if (order.payUrl) {
+        const link = document.createElement('a');
+        link.className = 'button-link primary';
+        link.href = order.payUrl;
+        if (!isMobilePaymentBrowser()) {
+          link.target = '_blank';
+          link.rel = 'noopener';
+        }
+        link.textContent = order.paymentMethod === 'alipay' ? '支付' : '打开支付';
+        return link;
+      }
+
+      return null;
+    }
+
+    function openPendingPaymentWindow() {
+      const mobileBrowser = isMobilePaymentBrowser();
+      const paymentWindow = mobileBrowser
+        ? window.open('about:blank', '_blank')
+        : window.open('', '_blank', 'width=520,height=760');
+      if (!paymentWindow) {
+        return null;
+      }
+
+      try {
+        paymentWindow.document.write(`
+          <!DOCTYPE html>
+          <html lang="zh-CN">
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <title>正在打开支付页面</title>
+              <style>
+                body {
+                  margin: 0;
+                  min-height: 100vh;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  background: #f4f8ff;
+                  color: #0b1f44;
+                  font: 16px/1.6 "Microsoft YaHei", sans-serif;
+                }
+                .payment-loading {
+                  padding: 28px 32px;
+                  border: 1px solid #d6e2ff;
+                  border-radius: 18px;
+                  background: #ffffff;
+                  box-shadow: 0 18px 40px rgba(35, 77, 160, 0.14);
+                  text-align: center;
+                }
+              </style>
+            </head>
+            <body>
+              <div class="payment-loading">
+                <strong>订单已创建</strong>
+                <div>正在打开支付二维码，请稍候...</div>
+              </div>
+            </body>
+          </html>
+        `);
+        paymentWindow.document.close();
+      } catch (_) {}
+
+      return paymentWindow;
+    }
+
+    function openOrderPaymentInNewWindow(order, paymentWindow) {
+      if (!order || !order.payUrl || order.paymentMethod === 'mock') {
+        if (paymentWindow && !paymentWindow.closed) {
+          paymentWindow.close();
+        }
+        return false;
+      }
+
+      if (paymentWindow && !paymentWindow.closed) {
+        paymentWindow.location.replace(order.payUrl);
+        paymentWindow.focus();
+        return true;
+      }
+
+      if (isMobilePaymentBrowser()) {
+        window.location.assign(order.payUrl);
+        return true;
+      }
+
+      const fallbackWindow = window.open(order.payUrl, '_blank');
+      if (fallbackWindow) {
+        fallbackWindow.focus();
+        return true;
+      }
+
+      return false;
+    }
+
+    async function loadProduct() {
+      const data = await request('/api/payments/product');
+      productBaseAmountCents = Number(data.baseAmountCents || data.amountCents || productBaseAmountCents);
+      productCurrency = String(data.currency || productCurrency || 'CNY').trim() || 'CNY';
+      productPrice.textContent = data.amountText || '--';
+      soldCount.textContent = Number(data.soldCount || 0).toLocaleString('zh-CN');
+      stockCount.textContent = Number(data.stockCount || 0).toLocaleString('zh-CN');
+      syncStockUi(data);
+      renderOrderTotal();
+      if (!data.mockPayEnabled) {
+        mockMethod.style.display = 'none';
+      }
+    }
+
+    function renderOrder(order) {
+      if (!order) return;
+      currentOrderNo = order.orderNo;
+      currentOrderToken = order.orderToken || currentOrderToken;
+      statusBox.classList.add('show');
+      document.getElementById('status-order').textContent = order.orderNo;
+      document.getElementById('status-amount').textContent = order.amountText;
+      document.getElementById('status-state').textContent = getOrderStatusText(order);
+      payActions.innerHTML = '';
+
+      if (Number(order.itemCount || 1) > 1) {
+        renderBatchOrder(order);
+      } else {
+        clearBatchOrder();
+      }
+
+      if (order.status === 'delivered' && order.cdkCode && Number(order.itemCount || 1) === 1) {
+        qrBox.classList.remove('show');
+        codeEl.textContent = order.cdkCode;
+        codeBox.classList.add('show');
+        joinBtn.href = `/join?cdk=${encodeURIComponent(order.cdkCode)}&email=${encodeURIComponent(order.buyerEmail || '')}`;
+        stopPolling();
+        return;
+      }
+
+      codeBox.classList.remove('show');
+      qrBox.classList.remove('show');
+
+      if (order.status === 'delivered') {
+        stopPolling();
+      }
+
+      const payAction = createOrderPayAction(order, updatedOrder => {
+        renderOrder({ ...order, ...updatedOrder, orderToken: order.orderToken || updatedOrder.orderToken });
+      });
+      if (payAction) {
+        payActions.appendChild(payAction);
+      }
+
+      if (order.payQrUrl) {
+        payQr.src = order.payQrUrl;
+        paymentInstructions.innerHTML = (order.paymentInstructions || []).map(item => `<li>${escapeHtml(item)}</li>`).join('');
+        orderTail.textContent = `付款备注：${order.orderTail || String(order.orderNo || '').slice(-4)}`;
+        qrBox.classList.add('show');
+      }
+    }
+
+    function renderBatchOrder(order) {
+      if (!order || Number(order.itemCount || 1) <= 1) {
+        clearBatchOrder();
+        return;
+      }
+
+      const cdkCodes = Array.isArray(order.cdkCodes) ? order.cdkCodes : [];
+      if (order.status !== 'delivered' || !cdkCodes.length) {
+        clearBatchOrder();
+        return;
+      }
+
+      batchResult.dataset.orderNo = order.orderNo;
+      batchResult.innerHTML = '';
+      batchResult.classList.add('show');
+
+      const codeList = document.createElement('div');
+      codeList.className = 'batch-code-list';
+      codeList.textContent = cdkCodes.join('\n\n');
+      batchResult.appendChild(codeList);
+
+      const actions = document.createElement('div');
+      actions.className = 'batch-result-actions';
+
+      const copyAllBtn = document.createElement('button');
+      copyAllBtn.type = 'button';
+      copyAllBtn.className = 'secondary';
+      copyAllBtn.textContent = '复制全部';
+      attachCopyFeedback(copyAllBtn, cdkCodes.join('\n'), '复制全部');
+      actions.appendChild(copyAllBtn);
+
+      batchResult.appendChild(actions);
+    }
+
+    function startPolling(orderNo) {
+      stopPolling();
+      pollTimer = setInterval(async () => {
+        try {
+          const qs = currentOrderToken ? `?token=${encodeURIComponent(currentOrderToken)}` : '';
+          const data = await request(`/api/payments/status/${encodeURIComponent(orderNo)}${qs}`);
+          renderOrder(data.order);
+        } catch {}
+      }, 3000);
+    }
+
+    function stopPolling() {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    }
+
+    async function loadOrderFromLocation() {
+      const orderNo = (urlParams.get('orderNo') || '').trim();
+      const token = (urlParams.get('token') || '').trim();
+      const email = (urlParams.get('email') || '').trim();
+
+      if (email) {
+        if (!lookupEmail.value.trim()) {
+          lookupEmail.value = email;
+        }
+        const buyerEmailInput = document.getElementById('buyer-email');
+        if (buyerEmailInput && !buyerEmailInput.value.trim()) {
+          buyerEmailInput.value = email;
+        }
+      }
+
+      if (!orderNo || !token) {
+        return;
+      }
+
+      currentOrderToken = token;
+      const data = await request(`/api/payments/orders/${encodeURIComponent(orderNo)}?token=${encodeURIComponent(token)}`);
+      renderOrder({ ...data.order, orderToken: token });
+      if (data.order && data.order.status !== 'delivered') {
+        startPolling(orderNo);
+      }
+      statusBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const buyerEmail = syncNormalizedEmailInput(buyerEmailInput);
+      if (!buyerEmail) {
+        showNotice('请输入接收邮箱');
+        buyerEmailInput.focus();
+        return;
+      }
+      if (!isValidEmailInput(buyerEmail)) {
+        showNotice('请输入接收邮箱');
+        buyerEmailInput.focus();
+        return;
+      }
+      if (availableStockCount <= 0) {
+        showNotice(stockNoticeText || '当前无库存，请稍后再试');
+        return;
+      }
+      const itemCount = getOrderQuantityValue();
+      if (itemCount > availableStockCount) {
+        showNotice(`库存不足，当前仅剩 ${availableStockCount} 个可售名额`);
+        return;
+      }
+
+      const paymentMethod = getMethod();
+      showNotice('');
+      codeBox.classList.remove('show');
+      createBtn.disabled = true;
+      const paymentWindow = paymentMethod !== 'mock' ? openPendingPaymentWindow() : null;
+      createBtn.textContent = '提交中...';
+
+      try {
+        const data = await request('/api/payments/orders', {
+          method: 'POST',
+          body: JSON.stringify({
+            buyer_email: buyerEmail,
+            payment_method: paymentMethod,
+            item_count: itemCount,
+          }),
+        });
+        renderOrder(data.order);
+        startPolling(data.order.orderNo);
+        lookupEmail.value = buyerEmail;
+        await loadProduct();
+        if (!data.providerConfigured) {
+          if (paymentWindow && !paymentWindow.closed) {
+            paymentWindow.close();
+          }
+          showNotice(data.message);
+        } else if (data.order && data.order.paymentMethod !== 'mock' && data.order.payUrl) {
+          const popupOpened = openOrderPaymentInNewWindow(data.order, paymentWindow);
+          if (!popupOpened) {
+            showNotice('订单已创建，浏览器拦截了支付弹窗，请点击下方“支付”按钮继续。');
+          }
+        }
+      } catch (err) {
+        if (paymentWindow && !paymentWindow.closed) {
+          paymentWindow.close();
+        }
+        showNotice(err.message);
+      } finally {
+        createBtn.disabled = availableStockCount <= 0;
+        createBtn.textContent = availableStockCount <= 0 ? '暂时无库存' : '提交订单';
+      }
+    });
+
+    /*
+    batchCreateBtn.onclick = async () => {
+      const batchEmail = batchEmailInput.value.trim();
+      const batchQuantity = Number.parseInt(batchQuantityInput.value, 10);
+      if (availableStockCount <= 0) {
+        showNotice(stockNoticeText || '当前无库存，请稍后再试');
+        return;
+      }
+      if (!batchEmail) {
+        showNotice('请输入接收邮箱');
+        return;
+      }
+      if (!Number.isInteger(batchQuantity) || batchQuantity < 1) {
+        showNotice('请输入正确的购买数量');
+        return;
+      }
+      if (batchQuantity > MAX_BATCH_QUANTITY) {
+        showNotice(`单次最多只能批量购买 ${MAX_BATCH_QUANTITY} 个 CDK`);
+        return;
+      }
+
+      showNotice('');
+      batchCreateBtn.disabled = true;
+      batchCreateBtn.textContent = '创建中...';
+
+      try {
+        const data = await request('/api/payments/orders/batch', {
+          method: 'POST',
+          body: JSON.stringify({
+            buyer_email: batchEmail,
+            buyer_emails: [
+              {
+                email: batchEmail,
+                quantity: batchQuantity,
+              },
+            ],
+            payment_method: getMethod(),
+          }),
+        });
+
+        renderBatchOrder(data.order);
+        renderOrder(data.order);
+        startPolling(data.order.orderNo);
+        lookupEmail.value = batchEmail;
+        await loadProduct();
+        if (!data.providerConfigured) {
+          showNotice(data.message);
+        }
+      } catch (err) {
+        showNotice(err.message);
+      } finally {
+        batchCreateBtn.disabled = availableStockCount <= 0;
+        batchCreateBtn.textContent = availableStockCount <= 0 ? '暂时无库存' : '创建总订单';
+      }
+    };
+
+    };
+    */
+
+    copyBtn.onclick = async () => {
+      const code = codeEl.textContent.trim();
+      if (!code) return;
+      await navigator.clipboard.writeText(code).catch(() => {});
+      copyBtn.textContent = '已复制';
+      setTimeout(() => { copyBtn.textContent = '复制 CDK'; }, 1400);
+    };
+
+    function renderLookupOrders(orders) {
+      if (!orders.length) {
+        lookupResult.innerHTML = '<div class="lookup-item"><small>没有查到这个邮箱的订单。</small></div>';
+        return;
+      }
+
+      lookupResult.innerHTML = orders.map(order => {
+        const itemCount = Number(order.itemCount || 1);
+        const status = getOrderStatusText(order);
+        const cdkLine = Array.isArray(order.cdkCodes) && order.cdkCodes.length
+          ? `
+            <div class="lookup-cdk-row">
+              <div class="lookup-cdk-head">
+                <span class="lookup-cdk-label">CDK：</span>
+                <button class="secondary" type="button" data-copy-order="${escapeHtml(order.orderNo)}">复制全部</button>
+              </div>
+              <div class="lookup-cdk-list">${order.cdkCodes.map(code => escapeHtml(code)).join('<br><br>')}</div>
+            </div>
+          `
+          : '';
+        return `
+          <div class="lookup-item">
+            <div class="lookup-item-head">
+              <span>${escapeHtml(status)}</span>
+              <button class="secondary" type="button" data-order-no="${escapeHtml(order.orderNo)}">查看</button>
+            </div>
+            <small>订单号：${escapeHtml(order.orderNo)}</small>
+            <small>金额：${escapeHtml(order.amountText)}</small>
+            <small>数量：${itemCount} 个 CDK</small>
+            <small>时间：${escapeHtml(order.createdAt || '')}</small>
+            ${cdkLine}
+          </div>
+        `;
+      }).join('');
+
+      lookupResult.querySelectorAll('button[data-order-no]').forEach(button => {
+        button.addEventListener('click', () => {
+          const order = orders.find(item => item.orderNo === button.dataset.orderNo);
+          if (!order) return;
+          viewOrder(order);
+        });
+      });
+
+      lookupResult.querySelectorAll('button[data-copy-order]').forEach(button => {
+        button.addEventListener('click', async () => {
+          const order = orders.find(item => item.orderNo === button.dataset.copyOrder);
+          const codes = Array.isArray(order?.cdkCodes) ? order.cdkCodes.filter(Boolean) : [];
+          if (!codes.length) return;
+          const copied = await copyText(codes.join('\n'));
+          button.textContent = copied ? '已复制' : '复制失败';
+          setTimeout(() => {
+            button.textContent = '复制全部';
+          }, 1400);
+        });
+      });
+    }
+
+    lookupBtn.onclick = async () => {
+      const email = syncNormalizedEmailInput(lookupEmail) || syncNormalizedEmailInput(buyerEmailInput);
+      if (!email) {
+        showNotice('请输入下单邮箱');
+        lookupEmail.focus();
+        return;
+      }
+      if (!isValidEmailInput(email)) {
+        showNotice('请输入下单邮箱');
+        lookupEmail.focus();
+        return;
+      }
+
+      lookupBtn.disabled = true;
+      lookupBtn.textContent = '查询中...';
+      try {
+        const data = await request('/api/payments/query-by-email', {
+          method: 'POST',
+          body: JSON.stringify({ buyer_email: email }),
+        });
+        renderLookupOrders(data.orders || []);
+      } catch (err) {
+        showNotice(err.message);
+      } finally {
+        lookupBtn.disabled = false;
+        lookupBtn.textContent = '查询订单';
+      }
+    };
+
+    const qqContactLink = document.querySelector('a[href*="wpa.qq.com"]');
+    if (qqContactLink) {
+      qqContactLink.href = '#';
+      qqContactLink.removeAttribute('target');
+      qqContactLink.removeAttribute('rel');
+
+      const qqContactPopover = document.createElement('span');
+      qqContactPopover.className = 'qq-contact-popover';
+      qqContactPopover.textContent = '1006267937';
+      qqContactLink.insertAdjacentElement('afterend', qqContactPopover);
+
+      const hideQqContact = () => {
+        qqContactPopover.classList.remove('show');
+      };
+
+      qqContactLink.addEventListener('click', (event) => {
+        event.preventDefault();
+        qqContactPopover.classList.toggle('show');
+      });
+
+      document.addEventListener('click', (event) => {
+        if (event.target !== qqContactLink && !qqContactPopover.contains(event.target)) {
+          hideQqContact();
+        }
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          hideQqContact();
+        }
+      });
+    }
+
+    loadProduct()
+      .then(() => loadOrderFromLocation())
+      .catch(err => showNotice(err.message));
+  </script>
+</body>
+</html>

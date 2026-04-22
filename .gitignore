@@ -16,12 +16,15 @@ data/monitor.db
 *.jpg
 *.jpeg
 *.webp
-*.html
 *.txt
+
+!public/*.html
+!public/assets/
+!public/assets/pay/
+!public/assets/pay/*.jpg
 
 *.lnk
 
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
