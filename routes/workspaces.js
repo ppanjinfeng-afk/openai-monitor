@@ -70,7 +70,11 @@ function normalizeSortField(sort) {
 }
 
 function buildWorkspaceWhereClause({ search, status, capacity }) {
-  const conditions = [];
+  const conditions = [
+    `a.status = 'active'`,
+    `a.access_token IS NOT NULL`,
+    `a.access_token != ''`,
+  ];
   const params = [];
 
   if (search) {
@@ -528,7 +532,10 @@ router.get('/member-cleanup', (req, res) => {
     FROM workspace_members wm
     JOIN workspaces w ON w.workspace_id = wm.workspace_id AND w.account_id = wm.account_id
     JOIN accounts a ON a.id = wm.account_id
-    WHERE COALESCE(wm.deactivated_time, '') = ''
+    WHERE a.status = 'active'
+      AND a.access_token IS NOT NULL
+      AND a.access_token != ''
+      AND COALESCE(wm.deactivated_time, '') = ''
   `).all();
 
   const pendingItems = db.prepare(`
@@ -554,6 +561,9 @@ router.get('/member-cleanup', (req, res) => {
     FROM workspace_pending_invites wp
     JOIN workspaces w ON w.workspace_id = wp.workspace_id AND w.account_id = wp.account_id
     JOIN accounts a ON a.id = wp.account_id
+    WHERE a.status = 'active'
+      AND a.access_token IS NOT NULL
+      AND a.access_token != ''
   `).all();
 
   let items = [...memberItems, ...pendingItems];
@@ -622,7 +632,10 @@ router.get('/dashboard', (req, res) => {
     SELECT w.*, a.email AS account_email
     FROM workspaces w
     JOIN accounts a ON a.id = w.account_id
-    WHERE w.sync_status = 'error'
+    WHERE a.status = 'active'
+      AND a.access_token IS NOT NULL
+      AND a.access_token != ''
+      AND w.sync_status = 'error'
     ORDER BY w.updated_at DESC
     LIMIT 10
   `).all();
@@ -642,7 +655,10 @@ router.get('/dashboard', (req, res) => {
     SELECT w.*, a.email AS account_email
     FROM workspaces w
     JOIN accounts a ON a.id = w.account_id
-    WHERE w.projected_remaining_seats <= 0
+    WHERE a.status = 'active'
+      AND a.access_token IS NOT NULL
+      AND a.access_token != ''
+      AND w.projected_remaining_seats <= 0
     ORDER BY w.projected_remaining_seats ASC, w.health_score ASC
     LIMIT 10
   `).all();
@@ -664,7 +680,10 @@ router.get('/dashboard', (req, res) => {
     SELECT w.*, a.email AS account_email
     FROM workspaces w
     JOIN accounts a ON a.id = w.account_id
-    WHERE w.health_score < 65
+    WHERE a.status = 'active'
+      AND a.access_token IS NOT NULL
+      AND a.access_token != ''
+      AND w.health_score < 65
     ORDER BY w.health_score ASC
     LIMIT 10
   `).all();
@@ -728,7 +747,11 @@ router.get('/dashboard', (req, res) => {
       SUM(CASE WHEN projected_remaining_seats = 1 THEN 1 ELSE 0 END) AS warning_quota,
       SUM(CASE WHEN projected_remaining_seats > 1 THEN 1 ELSE 0 END) AS healthy_quota,
       SUM(CASE WHEN health_score < 65 THEN 1 ELSE 0 END) AS risky_workspaces
-    FROM workspaces
+    FROM workspaces w
+    JOIN accounts a ON a.id = w.account_id
+    WHERE a.status = 'active'
+      AND a.access_token IS NOT NULL
+      AND a.access_token != ''
   `).get() || {};
 
   res.json({

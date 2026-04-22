@@ -703,9 +703,13 @@ async function syncAccountWorkspacesWithPage(page, account) {
 
 async function syncAccountWorkspaces(account, options = {}) {
   if (!account || !account.access_token || account.status !== 'active') {
+    if (account?.id) {
+      removeMissingWorkspaceSnapshots(account.id, []);
+    }
     return {
       success: false,
       skipped: true,
+      removed: true,
       accountId: account?.id || null,
       email: account?.email || '',
       message: '账号未授权或不处于活跃状态',
@@ -723,9 +727,6 @@ async function syncAllWorkspaceSnapshots() {
   const accounts = db.prepare(`
     SELECT *
     FROM accounts
-    WHERE status = 'active'
-      AND access_token IS NOT NULL
-      AND access_token != ''
     ORDER BY id ASC
   `).all();
 
@@ -733,7 +734,11 @@ async function syncAllWorkspaceSnapshots() {
     const results = [];
     for (const account of accounts) {
       try {
-        results.push(await syncAccountWorkspacesWithPage(page, account));
+        if (account.status === 'active' && account.access_token) {
+          results.push(await syncAccountWorkspacesWithPage(page, account));
+        } else {
+          results.push(await syncAccountWorkspaces(account, { page }));
+        }
       } catch (err) {
         results.push({
           success: false,
