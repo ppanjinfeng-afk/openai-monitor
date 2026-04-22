@@ -2366,14 +2366,27 @@ router.post('/auto-invite', async (req, res) => {
           excludedWorkspaceIds: effectiveExcludedWorkspaceIds,
         })
         : null;
+      const getNonPausedDegradedWorkspaceCandidates = excludedAccountIds =>
+        getInviteWorkspaceCandidates(excludedAccountIds, {
+          excludedWorkspaceIds: effectiveExcludedWorkspaceIds,
+          includeDegraded: true,
+        }).filter(candidate => !isInvitePaused(candidate?.account));
       workspaceCandidates = getInviteWorkspaceCandidates(strictExcludedIds, {
         excludedWorkspaceIds: effectiveExcludedWorkspaceIds,
       });
+
+      if (workspaceCandidates.length === 0) {
+        workspaceCandidates = getNonPausedDegradedWorkspaceCandidates(strictExcludedIds);
+      }
 
       if (preferFreshWorkspace && workspaceCandidates.length === 0 && usedWorkspaceIds.length > 0) {
         workspaceCandidates = getInviteWorkspaceCandidates(excludedIds, {
           excludedWorkspaceIds: effectiveExcludedWorkspaceIds,
         });
+
+        if (workspaceCandidates.length === 0) {
+          workspaceCandidates = getNonPausedDegradedWorkspaceCandidates(excludedIds);
+        }
       }
 
       if (preferredWorkspaceCandidate) {
