@@ -65,8 +65,12 @@ npx puppeteer browsers install chrome || true
 
 echo "[6/7] Installing systemd services..."
 cp "$APP_DIR/deploy/systemd/openai-monitor.service" /etc/systemd/system/openai-monitor.service
+cp "$APP_DIR/deploy/systemd/openai-monitor-healthcheck.service" /etc/systemd/system/openai-monitor-healthcheck.service
+cp "$APP_DIR/deploy/systemd/openai-monitor-healthcheck.timer" /etc/systemd/system/openai-monitor-healthcheck.timer
+chmod +x "$APP_DIR/deploy/scripts/openai-monitor-healthcheck.sh"
 systemctl daemon-reload
 systemctl enable openai-monitor
+systemctl enable openai-monitor-healthcheck.timer
 
 echo "[7/7] Installing nginx config..."
 cp "$APP_DIR/deploy/nginx/openai-monitor.conf" /etc/nginx/sites-available/openai-monitor.conf
@@ -82,5 +86,7 @@ echo "Next:"
 echo "1. Upload your database to: $APP_DIR/data/monitor.db"
 echo "2. Start services:"
 echo "   systemctl restart openai-monitor"
+echo "   systemctl start openai-monitor-healthcheck.timer"
 echo "3. Check status:"
 echo "   systemctl status openai-monitor --no-pager"
+echo "   systemctl status openai-monitor-healthcheck.timer --no-pager"

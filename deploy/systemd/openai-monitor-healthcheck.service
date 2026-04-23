@@ -1,0 +1,13 @@
+[Unit]
+Description=OpenAI Monitor health check
+After=network.target openai-monitor.service
+Wants=openai-monitor.service
+
+[Service]
+Type=oneshot
+Environment=SERVICE_NAME=openai-monitor
+Environment=HEALTH_URL=http://127.0.0.1:3000/admin-login
+Environment=HEALTHCHECK_TIMEOUT_SECONDS=8
+ExecStart=/opt/openai-monitor/deploy/scripts/openai-monitor-healthcheck.sh
+User=root
+Group=root

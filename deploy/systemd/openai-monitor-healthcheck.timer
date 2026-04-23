@@ -1,0 +1,10 @@
+[Unit]
+Description=Run OpenAI Monitor health check every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+Unit=openai-monitor-healthcheck.service
+
+[Install]
+WantedBy=timers.target

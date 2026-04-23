@@ -76,14 +76,19 @@ npx puppeteer browsers install chrome
 
 ```bash
 sudo cp /opt/openai-monitor/deploy/systemd/openai-monitor.service /etc/systemd/system/
+sudo cp /opt/openai-monitor/deploy/systemd/openai-monitor-healthcheck.service /etc/systemd/system/
+sudo cp /opt/openai-monitor/deploy/systemd/openai-monitor-healthcheck.timer /etc/systemd/system/
+sudo chmod +x /opt/openai-monitor/deploy/scripts/openai-monitor-healthcheck.sh
 sudo systemctl daemon-reload
 sudo systemctl enable --now openai-monitor
+sudo systemctl enable --now openai-monitor-healthcheck.timer
 ```
 
 检查：
 
 ```bash
 sudo systemctl status openai-monitor --no-pager
+sudo systemctl status openai-monitor-healthcheck.timer --no-pager
 ```
 
 ## 8. 安装 Nginx
@@ -116,6 +121,7 @@ cd /opt/openai-monitor
 git pull origin main
 npm install
 sudo systemctl restart openai-monitor
+sudo systemctl restart openai-monitor-healthcheck.timer
 sudo systemctl reload nginx
 ```
 
@@ -123,10 +129,19 @@ sudo systemctl reload nginx
 
 ```bash
 sudo systemctl status openai-monitor --no-pager
+sudo systemctl status openai-monitor-healthcheck.timer --no-pager
 sudo systemctl status nginx --no-pager
 journalctl -u openai-monitor -n 100 --no-pager
+journalctl -u openai-monitor-healthcheck -n 50 --no-pager
 curl http://127.0.0.1:3000/api/checks/status
 ```
+
+## 14. 自动拉起说明
+
+- `openai-monitor.service` 本身已经配置了 `Restart=always`
+- 如果 Node 进程崩掉，systemd 会在 5 秒后自动拉起
+- `openai-monitor-healthcheck.timer` 每分钟跑一次
+- 如果发现 `http://127.0.0.1:3000/admin-login` 不通，或者服务不是 `active`，会自动执行 `systemctl restart openai-monitor`
 
 ## 13. 让 3000 端口支持账密登录
 
