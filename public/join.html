@@ -254,6 +254,19 @@
       background: #fff1f1;
       color: #8f1b1b;
     }
+    .panel-tip {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border: 1px solid #cfe0ff;
+      border-radius: 10px;
+      background: #f5f9ff;
+      color: #31507f;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+    .panel-tip strong {
+      color: #12305c;
+    }
     .result-card {
       margin-top: 18px;
       border: 1px solid #e3e8f1;
@@ -444,6 +457,9 @@
             <input id="email-input" type="email" placeholder="name@example.com" autocomplete="email" required>
           </div>
           <button class="primary" type="submit" id="btn-submit" disabled>提交激活</button>
+          <div class="panel-tip">
+            <strong>温馨提示：</strong>不建议用作于（号池、跑注册机、中转），这样会容易封号且不稳定。请正常使用：写代码、接 Codex 等等。
+          </div>
         </form>
 
         <div class="message" id="result-message"></div>
