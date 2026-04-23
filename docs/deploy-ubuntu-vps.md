@@ -141,7 +141,7 @@ curl http://127.0.0.1:3000/api/checks/status
 - `openai-monitor.service` 本身已经配置了 `Restart=always`
 - 如果 Node 进程崩掉，systemd 会在 5 秒后自动拉起
 - `openai-monitor-healthcheck.timer` 每分钟跑一次
-- 如果发现 `http://127.0.0.1:3000/admin-login` 不通，或者服务不是 `active`，会自动执行 `systemctl restart openai-monitor`
+- 如果发现 `http://127.0.0.1:3000/admin-login` 不通，或者服务卡在 `deactivating / stop-sigterm` 这类非 `active/running` 状态，会自动强制拉起 `openai-monitor`
 
 ## 13. 让 3000 端口支持账密登录
 

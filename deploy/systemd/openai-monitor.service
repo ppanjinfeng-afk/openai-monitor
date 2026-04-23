@@ -17,6 +17,8 @@ Environment=BIND_HOST=127.0.0.1
 ExecStart=/usr/bin/node /opt/openai-monitor/server.js
 Restart=always
 RestartSec=5
+KillMode=mixed
+TimeoutStopSec=20
 User=root
 Group=root
 

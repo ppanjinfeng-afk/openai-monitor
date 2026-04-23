@@ -24,14 +24,25 @@ log_message() {
   echo "[$LOG_TAG] $message"
 }
 
-restart_service() {
-  log_message "Restarting ${SERVICE_NAME}"
-  systemctl restart "$SERVICE_NAME"
+get_service_state() {
+  systemctl show "$SERVICE_NAME" --property=ActiveState --property=SubState --value \
+    | paste -sd ':' -
 }
 
-if ! systemctl is-active --quiet "$SERVICE_NAME"; then
-  log_message "${SERVICE_NAME} is not active"
-  restart_service
+force_restart_service() {
+  log_message "Force restarting ${SERVICE_NAME}"
+  systemctl kill --kill-who=all "$SERVICE_NAME" >/dev/null 2>&1 || true
+  systemctl reset-failed "$SERVICE_NAME" >/dev/null 2>&1 || true
+  systemctl start "$SERVICE_NAME"
+}
+
+service_state="$(get_service_state)"
+active_state="${service_state%%:*}"
+sub_state="${service_state#*:}"
+
+if [[ "$active_state" != "active" || "$sub_state" != "running" ]]; then
+  log_message "${SERVICE_NAME} state is ${active_state}/${sub_state}"
+  force_restart_service
   exit 0
 fi
 
@@ -43,7 +54,7 @@ if ! curl \
   --output /dev/null \
   "$HEALTH_URL"; then
   log_message "Health check failed for ${HEALTH_URL}"
-  restart_service
+  force_restart_service
   exit 0
 fi
 
