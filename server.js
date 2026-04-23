@@ -1,4 +1,5 @@
 const express = require('express');
+const compression = require('compression');
 const cors = require('cors');
 const path = require('path');
 const crypto = require('crypto');
@@ -19,6 +20,7 @@ const publicRateBuckets = new Map();
 const adminSessions = new Map();
 const ADMIN_SESSION_COOKIE = 'openai_monitor_admin_session';
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const publicDir = path.join(__dirname, 'public');
 const maintenancePagePath = path.join(__dirname, 'public', 'maintenance.html');
 const getSettingValueStmt = db.prepare('SELECT value FROM settings WHERE key = ?');
 
@@ -79,6 +81,28 @@ function isInternalBypassRequest(req) {
   }
 
   return String(req.get('x-openai-monitor-internal') || '').trim() === '1';
+}
+
+function setStaticCacheHeaders(res, filePath) {
+  const relativePath = path.relative(publicDir, filePath).replace(/\\/g, '/').toLowerCase();
+  const extension = path.extname(relativePath);
+
+  if (extension === '.html') {
+    res.setHeader('Cache-Control', 'no-store');
+    return;
+  }
+
+  if (relativePath.startsWith('js/') || relativePath.startsWith('css/')) {
+    res.setHeader('Cache-Control', 'public, max-age=600, stale-while-revalidate=86400');
+    return;
+  }
+
+  if (relativePath.startsWith('assets/')) {
+    res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+    return;
+  }
+
+  res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
 }
 
 function timingSafeEqualText(left, right) {
@@ -535,6 +559,7 @@ app.use(cors({
     callback(null, isAllowedCorsOrigin(origin) ? origin || false : false);
   },
 }));
+app.use(compression({ threshold: 1024 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: false }));
 app.use((req, res, next) => {
@@ -626,7 +651,11 @@ app.get('/admin-logout', (req, res) => {
   return res.redirect(302, '/admin-login');
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(publicDir, {
+  etag: true,
+  lastModified: true,
+  setHeaders: setStaticCacheHeaders,
+}));
 
 // API Routes
 app.use('/api/accounts', require('./routes/accounts'));
