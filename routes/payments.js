@@ -17,8 +17,6 @@ const DEFAULT_PRICE_CENTS = Number(process.env.CDK_TEAM_PRICE_CENTS || 200);
 const DEFAULT_CURRENCY = process.env.CDK_TEAM_CURRENCY || 'CNY';
 const SUPPORTED_METHODS = new Set(['alipay', 'mock']);
 const MAX_BATCH_ORDER_ITEMS = 20;
-const UNIQUE_AMOUNT_MIN_OFFSET_CENTS = 1;
-const UNIQUE_AMOUNT_MAX_OFFSET_CENTS = 10;
 const ORDER_TAIL_LENGTH = 4;
 
 function normalizeEmail(email) {
@@ -114,61 +112,12 @@ function getPublicBaseUrl() {
   return 'https://penqda.com';
 }
 
-function getSetting(key, fallback = '') {
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
-  return row?.value ?? fallback;
-}
-
-function isAlipayUniqueAmountEnabled() {
-  return String(process.env.ALIPAY_UNIQUE_AMOUNT_ENABLED || getSetting('alipay_unique_amount_enabled', 'true')).toLowerCase() !== 'false';
-}
-
-function getAlipayMatchWindowMinutes() {
-  const raw = Number(process.env.ALIPAY_MATCH_WINDOW_MINUTES || getSetting('alipay_match_window_minutes', '45'));
-  return Math.max(5, Math.min(240, Number.isFinite(raw) ? raw : 45));
-}
-
 function isOfficialAlipayPagePayEnabled() {
   return alipayPagePay.isAlipayPagePayReady();
 }
 
 function getAlipayOrderAmountCents(itemCount = 1) {
-  const baseAmountCents = DEFAULT_PRICE_CENTS * Math.max(1, Number(itemCount || 1));
-  return isOfficialAlipayPagePayEnabled()
-    ? baseAmountCents
-    : makeUniqueAlipayAmountCents(baseAmountCents);
-}
-
-function makeUniqueAlipayAmountCents(baseAmountCents = DEFAULT_PRICE_CENTS) {
-  if (!isAlipayUniqueAmountEnabled()) {
-    return baseAmountCents;
-  }
-
-  const windowMinutes = getAlipayMatchWindowMinutes();
-  const takenRows = db.prepare(`
-    SELECT amount_cents
-    FROM cdk_orders
-    WHERE payment_method = 'alipay'
-      AND status = 'pending'
-      AND amount_cents BETWEEN ? AND ?
-      AND created_at >= datetime('now', ?)
-  `).all(
-    baseAmountCents + UNIQUE_AMOUNT_MIN_OFFSET_CENTS,
-    baseAmountCents + UNIQUE_AMOUNT_MAX_OFFSET_CENTS,
-    `-${windowMinutes} minutes`
-  );
-  const taken = new Set(takenRows.map(row => Number(row.amount_cents || 0)));
-  const start = crypto.randomInt(UNIQUE_AMOUNT_MIN_OFFSET_CENTS, UNIQUE_AMOUNT_MAX_OFFSET_CENTS + 1);
-
-  for (let step = 0; step <= UNIQUE_AMOUNT_MAX_OFFSET_CENTS - UNIQUE_AMOUNT_MIN_OFFSET_CENTS; step += 1) {
-    const offset = UNIQUE_AMOUNT_MIN_OFFSET_CENTS + ((start - UNIQUE_AMOUNT_MIN_OFFSET_CENTS + step) % UNIQUE_AMOUNT_MAX_OFFSET_CENTS);
-    const amount = baseAmountCents + offset;
-    if (!taken.has(amount)) {
-      return amount;
-    }
-  }
-
-  return baseAmountCents + crypto.randomInt(UNIQUE_AMOUNT_MIN_OFFSET_CENTS, UNIQUE_AMOUNT_MAX_OFFSET_CENTS + 1);
+  return DEFAULT_PRICE_CENTS * Math.max(1, Number(itemCount || 1));
 }
 
 function buildProviderPayUrl(method, order) {
@@ -573,25 +522,16 @@ function normalizeAmountCents(value) {
 router.get('/product', (req, res) => {
   refreshInventoryInBackground();
   const pagePayEnabled = isOfficialAlipayPagePayEnabled();
-  const uniqueEnabled = !pagePayEnabled && isAlipayUniqueAmountEnabled();
-  const minAmount = (DEFAULT_PRICE_CENTS + UNIQUE_AMOUNT_MIN_OFFSET_CENTS) / 100;
-  const maxAmount = (DEFAULT_PRICE_CENTS + UNIQUE_AMOUNT_MAX_OFFSET_CENTS) / 100;
   const stats = getTeamProductStats();
   res.json({
     productType: PRODUCT_TYPE,
     title: 'ChatGPT Team 邀请 CDK',
     amountCents: DEFAULT_PRICE_CENTS,
-    amountText: uniqueEnabled
-      ? `${minAmount.toFixed(2)}-${maxAmount.toFixed(2)} ${DEFAULT_CURRENCY}`
-      : `${(DEFAULT_PRICE_CENTS / 100).toFixed(2)} ${DEFAULT_CURRENCY}`,
+    amountText: `${(DEFAULT_PRICE_CENTS / 100).toFixed(2)} ${DEFAULT_CURRENCY}`,
     baseAmountText: `${(DEFAULT_PRICE_CENTS / 100).toFixed(2)} ${DEFAULT_CURRENCY}`,
     currency: DEFAULT_CURRENCY,
     mockPayEnabled: getMockPayEnabled(),
     officialPagePayEnabled: pagePayEnabled,
-    uniqueAlipayAmountEnabled: uniqueEnabled,
-    uniqueAmountNote: uniqueEnabled
-      ? `下单后系统会显示本单专属金额 ${minAmount.toFixed(2)}-${maxAmount.toFixed(2)} 元，请按订单金额付款。`
-      : '',
     soldCount: stats.soldCount,
     stockCount: stats.stockCount,
     reservedCount: stats.reservedCount,

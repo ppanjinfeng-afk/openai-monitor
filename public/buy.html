@@ -1608,7 +1608,7 @@
         <div>
           <span class="badge">Team 邀请兑换</span>
           <h1>购买 CDK，自动获取 Team 邀请资格</h1>
-          <p>2 元起购买。下单后系统会给本单生成专属付款金额，付款确认后自动显示一次性 CDK。</p>
+          <p>2 元起购买。下单后会打开支付宝支付二维码，付款确认后自动显示一次性 CDK。</p>
           <div class="price">
             <strong id="price-text">--</strong>
             <span>每个 CDK</span>
@@ -1877,7 +1877,7 @@
 
       stockNoticeText = soldOut
         ? `当前无库存。待支付订单占位 ${orderHoldMinutes} 分钟，已售 CDK 保留 ${cdkReserveWindowMinutes} 分钟后释放库存。`
-        : String(product.uniqueAmountNote || '');
+        : '';
 
       showNotice(stockNoticeText);
     }

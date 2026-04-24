@@ -335,8 +335,6 @@ const defaultSettings = [
   ['daily_summary_hour', '9'],
   ['invite_cooldown_minutes', '5'],
   ['public_tunnel_enabled', 'true'],
-  ['alipay_unique_amount_enabled', 'true'],
-  ['alipay_match_window_minutes', '45'],
 ];
 const insertDefaults = db.transaction(() => {
   for (const [key, value] of defaultSettings) {
