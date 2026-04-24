@@ -1660,7 +1660,7 @@
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="2"/><path d="M8 10h8M12 7v10M8 16c3-1 5-3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 支付宝扫码
               </label>
-              <label class="method" id="mock-method">
+              <label class="method" id="mock-method" style="display:none">
                 <input type="radio" name="payment_method" value="mock">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M12 5v14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 本地测试
@@ -2086,6 +2086,10 @@
       return false;
     }
 
+    function wait(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
     async function loadProduct() {
       const data = await request('/api/payments/product');
       productBaseAmountCents = Number(data.baseAmountCents || data.amountCents || productBaseAmountCents);
@@ -2095,9 +2099,22 @@
       stockCount.textContent = Number(data.stockCount || 0).toLocaleString('zh-CN');
       syncStockUi(data);
       renderOrderTotal();
-      if (!data.mockPayEnabled) {
-        mockMethod.style.display = 'none';
+      mockMethod.style.display = data.mockPayEnabled ? '' : 'none';
+    }
+
+    async function loadProductWithRetry(retries = 3) {
+      let lastError;
+      for (let attempt = 0; attempt <= retries; attempt += 1) {
+        try {
+          return await loadProduct();
+        } catch (err) {
+          lastError = err;
+          if (attempt < retries) {
+            await wait(500 * (attempt + 1));
+          }
+        }
       }
+      throw lastError;
     }
 
     function renderOrder(order) {
@@ -2269,7 +2286,7 @@
         renderOrder(data.order);
         startPolling(data.order.orderNo);
         lookupEmail.value = buyerEmail;
-        await loadProduct();
+        await loadProductWithRetry(1).catch(() => {});
         if (!data.providerConfigured) {
           if (paymentWindow && !paymentWindow.closed) {
             paymentWindow.close();
@@ -2336,7 +2353,7 @@
         renderOrder(data.order);
         startPolling(data.order.orderNo);
         lookupEmail.value = batchEmail;
-        await loadProduct();
+        await loadProductWithRetry(1).catch(() => {});
         if (!data.providerConfigured) {
           showNotice(data.message);
         }
@@ -2478,9 +2495,9 @@
       });
     }
 
-    loadProduct()
-      .then(() => loadOrderFromLocation())
-      .catch(err => showNotice(err.message));
+    loadProductWithRetry()
+      .catch(err => showNotice(err.message))
+      .finally(() => loadOrderFromLocation());
   </script>
 </body>
 </html>

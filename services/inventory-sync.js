@@ -114,8 +114,16 @@ async function ensureInventoryFreshness(options = {}) {
   return refreshInFlight;
 }
 
+function refreshInventoryInBackground(options = {}) {
+  ensureInventoryFreshness(options).catch(err => {
+    lastRefreshError = err.message;
+    console.error('[InventorySync] Background refresh failed:', err.message);
+  });
+}
+
 module.exports = {
   INVENTORY_SYNC_MAX_AGE_MINUTES,
   ensureInventoryFreshness,
+  refreshInventoryInBackground,
   getInventorySyncState,
 };

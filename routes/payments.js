@@ -9,7 +9,7 @@ const {
   CDK_RESERVE_WINDOW_MINUTES,
   getTeamProductStats,
 } = require('../services/team-stock');
-const { ensureInventoryFreshness } = require('../services/inventory-sync');
+const { ensureInventoryFreshness, refreshInventoryInBackground } = require('../services/inventory-sync');
 
 const router = express.Router();
 
@@ -570,11 +570,8 @@ function normalizeAmountCents(value) {
   return Math.round(amount * 100);
 }
 
-router.get('/product', async (req, res) => {
-  await ensureInventoryFreshness().catch(err => {
-    console.error('[Payments] Inventory refresh before product failed:', err.message);
-  });
-
+router.get('/product', (req, res) => {
+  refreshInventoryInBackground();
   const pagePayEnabled = isOfficialAlipayPagePayEnabled();
   const uniqueEnabled = !pagePayEnabled && isAlipayUniqueAmountEnabled();
   const minAmount = (DEFAULT_PRICE_CENTS + UNIQUE_AMOUNT_MIN_OFFSET_CENTS) / 100;
