@@ -256,7 +256,7 @@ const App = {
     const page = options.page || this.currentPage;
     switch (page) {
       case 'dashboard':
-        await Promise.all([this.loadStats(), this.loadRecentLogs(), this.loadWorkspaceDashboard()]);
+        await Promise.all([this.loadStats(), this.loadRecentLogs(), this.loadWorkspaceDashboard(), this.loadCdkPriceSetting()]);
         break;
       case 'accounts':
         await this.refreshAccountsSurface();
@@ -864,6 +864,58 @@ const App = {
   },
 
   // ===== Settings =====
+  formatCdkPriceYuan(cents) {
+    return (Number(cents || 200) / 100).toFixed(2);
+  },
+
+  parseCdkPriceCents(value) {
+    const amount = Number(String(value || '').replace(/[^\d.]/g, ''));
+    if (!Number.isFinite(amount) || amount < 0.01 || amount > 9999.99) {
+      return null;
+    }
+    return Math.round(amount * 100);
+  },
+
+  applyCdkPriceSetting(settings = {}) {
+    const cents = Number.parseInt(settings.cdk_team_price_cents || '200', 10) || 200;
+    const yuan = this.formatCdkPriceYuan(cents);
+    const input = document.getElementById('dashboard-cdk-price-yuan');
+    const note = document.getElementById('dashboard-cdk-price-note');
+
+    if (input) {
+      input.value = yuan;
+    }
+    if (note) {
+      note.textContent = `当前每个 CDK：${yuan} CNY，新订单会按此金额生成支付宝 API 二维码。`;
+    }
+  },
+
+  async loadCdkPriceSetting() {
+    try {
+      const settings = await API.getSettings();
+      this.applyCdkPriceSetting(settings);
+    } catch (err) {
+      console.error('Failed to load CDK price setting:', err);
+    }
+  },
+
+  async saveCdkPriceSetting() {
+    const input = document.getElementById('dashboard-cdk-price-yuan');
+    const cents = this.parseCdkPriceCents(input?.value);
+    if (!cents) {
+      this.toast('请输入 0.01 到 9999.99 之间的金额', 'error');
+      return;
+    }
+
+    try {
+      const settings = await API.updateSettings({ cdk_team_price_cents: String(cents) });
+      this.applyCdkPriceSetting(settings);
+      this.toast(`CDK 售价已更新为 ${this.formatCdkPriceYuan(cents)} CNY`, 'success');
+    } catch (err) {
+      this.toast('保存金额失败: ' + err.message, 'error');
+    }
+  },
+
   async loadSettings() {
     try {
       const settings = await API.getSettings();
@@ -877,6 +929,7 @@ const App = {
       const publicTunnelEnabled = settings.public_tunnel_enabled !== 'false';
       document.getElementById('public-tunnel-enabled').checked = publicTunnelEnabled;
       this.updatePublicTunnelStatus(publicTunnelEnabled);
+      this.applyCdkPriceSetting(settings);
     } catch (err) {
       console.error('Failed to load settings:', err);
     }
@@ -3743,6 +3796,9 @@ const App = {
     });
     document.getElementById('btn-save-public-tunnel').addEventListener('click', () => {
       this.saveSettings('public-tunnel');
+    });
+    document.getElementById('btn-save-dashboard-cdk-price').addEventListener('click', () => {
+      this.saveCdkPriceSetting();
     });
 
     // Invites

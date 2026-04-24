@@ -13,7 +13,7 @@ const { ensureInventoryFreshness, refreshInventoryInBackground } = require('../s
 
 const router = express.Router();
 
-const DEFAULT_PRICE_CENTS = Number(process.env.CDK_TEAM_PRICE_CENTS || 200);
+const FALLBACK_PRICE_CENTS = Number(process.env.CDK_TEAM_PRICE_CENTS || 200);
 const DEFAULT_CURRENCY = process.env.CDK_TEAM_CURRENCY || 'CNY';
 const SUPPORTED_METHODS = new Set(['alipay', 'mock']);
 const MAX_BATCH_ORDER_ITEMS = 20;
@@ -116,8 +116,18 @@ function isOfficialAlipayPagePayEnabled() {
   return alipayPagePay.isAlipayPagePayReady();
 }
 
+function getTeamPriceCents() {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('cdk_team_price_cents');
+  const configured = Number.parseInt(row?.value, 10);
+  if (Number.isFinite(configured) && configured > 0) {
+    return configured;
+  }
+
+  return FALLBACK_PRICE_CENTS;
+}
+
 function getAlipayOrderAmountCents(itemCount = 1) {
-  return DEFAULT_PRICE_CENTS * Math.max(1, Number(itemCount || 1));
+  return getTeamPriceCents() * Math.max(1, Number(itemCount || 1));
 }
 
 function buildProviderPayUrl(method, order) {
@@ -273,6 +283,7 @@ function toPublicOrder(order, options = {}) {
   const cdkCodes = itemCodes.length
     ? itemCodes
     : (includeCdk && order.status === 'delivered' && order.cdk_code ? [order.cdk_code] : []);
+  const currentPriceCents = getTeamPriceCents();
 
   return {
     orderNo: order.order_no,
@@ -282,8 +293,8 @@ function toPublicOrder(order, options = {}) {
     paymentMethod: order.payment_method,
     amountCents: order.amount_cents,
     amountText: `${(Number(order.amount_cents || 0) / 100).toFixed(2)} ${order.currency || DEFAULT_CURRENCY}`,
-    baseAmountCents: DEFAULT_PRICE_CENTS,
-    baseAmountText: `${(DEFAULT_PRICE_CENTS / 100).toFixed(2)} ${order.currency || DEFAULT_CURRENCY}`,
+    baseAmountCents: currentPriceCents,
+    baseAmountText: `${(currentPriceCents / 100).toFixed(2)} ${order.currency || DEFAULT_CURRENCY}`,
     itemCount,
     deliveredCount: order.status === 'delivered'
       ? cdkCodes.length
@@ -326,7 +337,7 @@ function createPendingOrder({ buyerEmail, paymentMethod, itemEmails = [] }) {
     payment_method: paymentMethod,
     amount_cents: paymentMethod === 'alipay'
       ? getAlipayOrderAmountCents(itemCount)
-      : DEFAULT_PRICE_CENTS * itemCount,
+      : getTeamPriceCents() * itemCount,
     currency: DEFAULT_CURRENCY,
     item_count: itemCount,
   };
@@ -523,12 +534,13 @@ router.get('/product', (req, res) => {
   refreshInventoryInBackground();
   const pagePayEnabled = isOfficialAlipayPagePayEnabled();
   const stats = getTeamProductStats();
+  const priceCents = getTeamPriceCents();
   res.json({
     productType: PRODUCT_TYPE,
     title: 'ChatGPT Team 邀请 CDK',
-    amountCents: DEFAULT_PRICE_CENTS,
-    amountText: `${(DEFAULT_PRICE_CENTS / 100).toFixed(2)} ${DEFAULT_CURRENCY}`,
-    baseAmountText: `${(DEFAULT_PRICE_CENTS / 100).toFixed(2)} ${DEFAULT_CURRENCY}`,
+    amountCents: priceCents,
+    amountText: `${(priceCents / 100).toFixed(2)} ${DEFAULT_CURRENCY}`,
+    baseAmountText: `${(priceCents / 100).toFixed(2)} ${DEFAULT_CURRENCY}`,
     currency: DEFAULT_CURRENCY,
     mockPayEnabled: getMockPayEnabled(),
     officialPagePayEnabled: pagePayEnabled,

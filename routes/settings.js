@@ -29,17 +29,33 @@ router.put('/', (req, res) => {
     'daily_summary_hour',
     'invite_cooldown_minutes',
     'public_tunnel_enabled',
+    'cdk_team_price_cents',
   ];
 
   const updateAll = db.transaction(() => {
     for (const [key, value] of Object.entries(req.body)) {
       if (allowedKeys.includes(key)) {
+        if (key === 'cdk_team_price_cents') {
+          const cents = Number.parseInt(value, 10);
+          if (!Number.isFinite(cents) || cents < 1 || cents > 999999) {
+            const err = new Error('CDK 单价必须在 0.01 到 9999.99 元之间');
+            err.statusCode = 400;
+            throw err;
+          }
+          update.run(key, String(cents));
+          continue;
+        }
+
         update.run(key, String(value));
       }
     }
   });
 
-  updateAll();
+  try {
+    updateAll();
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({ error: err.message });
+  }
 
   // Restart scheduler if interval changed
   if (req.body.check_interval_minutes || req.body.daily_summary_enabled || req.body.daily_summary_hour) {
