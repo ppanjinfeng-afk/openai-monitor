@@ -8,7 +8,7 @@ const {
   PRODUCT_TYPE: TEAM_PRODUCT_TYPE,
   getTeamActivationAvailability,
 } = require('../services/team-stock');
-const { ensureInventoryFreshness } = require('../services/inventory-sync');
+const { ensureInventoryFreshness, refreshInventoryInBackground } = require('../services/inventory-sync');
 
 const router = express.Router();
 
@@ -379,10 +379,8 @@ router.post('/batch-delete', (req, res) => {
 /**
  * POST /api/cdk/verify — Verify if a CDK code is valid
  */
-router.post('/verify', async (req, res) => {
-  await ensureInventoryFreshness().catch(err => {
-    console.error('[CDK] Inventory refresh before verify failed:', err.message);
-  });
+router.post('/verify', (req, res) => {
+  refreshInventoryInBackground();
 
   const cardCode = (req.body.cardCode || '').trim().toUpperCase();
   
