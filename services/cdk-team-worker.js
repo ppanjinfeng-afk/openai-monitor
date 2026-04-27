@@ -1,6 +1,11 @@
 const db = require('../db');
 const fetch = require('node-fetch');
 
+const TEAM_INVITE_REQUEST_TIMEOUT_MS = Math.max(
+  5000,
+  Number(process.env.CDK_TEAM_INVITE_TIMEOUT_MS || 120000)
+);
+
 class CdkTeamWorker {
   constructor() {
     this.processing = new Set();
@@ -39,19 +44,33 @@ class CdkTeamWorker {
 
   async sendAutoInvite(email, task = null) {
     const baseUrl = process.env.INTERNAL_BASE_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
-    const response = await fetch(`${baseUrl}/api/accounts/auto-invite`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-openai-monitor-internal': '1',
-      },
-      body: JSON.stringify({
-        email,
-        prefer_fresh_workspace: true,
-        cdk_task_id: task?.id || '',
-        cdk_code: task?.cdk_code || '',
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TEAM_INVITE_REQUEST_TIMEOUT_MS);
+    let response;
+
+    try {
+      response = await fetch(`${baseUrl}/api/accounts/auto-invite`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-openai-monitor-internal': '1',
+        },
+        body: JSON.stringify({
+          email,
+          prefer_fresh_workspace: true,
+          cdk_task_id: task?.id || '',
+          cdk_code: task?.cdk_code || '',
+        }),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err?.name === 'AbortError') {
+        throw new Error(`Team 邀请请求超时（${Math.round(TEAM_INVITE_REQUEST_TIMEOUT_MS / 1000)} 秒）`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const raw = await response.text();
     let data = null;

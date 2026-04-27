@@ -9,6 +9,7 @@ const {
   getTeamActivationAvailability,
 } = require('../services/team-stock');
 const { ensureInventoryFreshness, refreshInventoryInBackground } = require('../services/inventory-sync');
+const { releaseStaleProcessingCdks } = require('../services/cdk-processing-timeout');
 
 const router = express.Router();
 
@@ -228,6 +229,8 @@ function detachCdkReferences(cardIds) {
  * GET /api/cdk/list — List all CDK cards with stats
  */
 router.get('/list', (req, res) => {
+  releaseStaleProcessingCdks();
+
   const status = req.query.status || 'all';
   const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 100));
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -380,6 +383,7 @@ router.post('/batch-delete', (req, res) => {
  * POST /api/cdk/verify — Verify if a CDK code is valid
  */
 router.post('/verify', (req, res) => {
+  releaseStaleProcessingCdks();
   refreshInventoryInBackground();
 
   const cardCode = (req.body.cardCode || '').trim().toUpperCase();
@@ -532,6 +536,8 @@ router.post('/submit', (req, res) => {
  * POST /api/cdk/submit-team - Submit a CDK task that sends a Team invite.
  */
 router.post('/submit-team', async (req, res) => {
+  releaseStaleProcessingCdks();
+
   const cardCode = (req.body.cardCode || '').trim().toUpperCase();
   const email = normalizeEmail(req.body.email);
 
@@ -633,6 +639,8 @@ router.post('/submit-team-batch', async (req, res) => {
 });
 
 router.get('/query/:taskId', (req, res) => {
+  releaseStaleProcessingCdks();
+
   const taskId = req.params.taskId;
   const task = db.prepare('SELECT * FROM cdk_tasks WHERE id = ?').get(taskId);
 

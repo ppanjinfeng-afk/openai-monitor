@@ -5,6 +5,7 @@ const quotaSync = require('./quota-sync');
 const workspaceSync = require('./workspace-sync');
 const memberOverflowRebalance = require('./member-overflow-rebalance');
 const untrackedMemberCleanup = require('./untracked-member-cleanup');
+const { releaseStaleProcessingCdks } = require('./cdk-processing-timeout');
 const telegram = require('./telegram');
 
 let checkTask = null;
@@ -36,6 +37,7 @@ async function runCheckCycle(trigger = 'manual') {
   console.log(`[Scheduler] Running ${trigger} check at ${new Date().toISOString()}`);
 
   try {
+    releaseStaleProcessingCdks({ log: true });
     await checker.checkAllAccounts();
     await workspaceSync.syncAllWorkspaceSnapshots();
     await untrackedMemberCleanup.autoKickUntrackedMembers();
