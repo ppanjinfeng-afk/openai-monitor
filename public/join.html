@@ -602,11 +602,25 @@
       }
     });
 
+    const PROCESSING_RETRY_TIP = '如果没反应，10分钟后CDK重置请重试';
+
+    function withProcessingRetryTip(message) {
+      const text = String(message || '').trim();
+      if (!text || text.includes(PROCESSING_RETRY_TIP)) {
+        return text || PROCESSING_RETRY_TIP;
+      }
+      return `${text}。${PROCESSING_RETRY_TIP}`;
+    }
+
     function showTask(taskId, email, state) {
       taskCard.classList.add('show');
       document.getElementById('task-id').textContent = taskId || '--';
       document.getElementById('task-email').textContent = email || '--';
-      document.getElementById('task-state').textContent = state || '--';
+      const stateText = String(state || '').trim();
+      const isProcessing = ['排队中', '处理中', '正在发送 Team 邀请...', 'pending', 'PENDING', 'PROCESSING'].includes(stateText);
+      document.getElementById('task-state').textContent = isProcessing
+        ? withProcessingRetryTip(stateText)
+        : (stateText || '--');
     }
 
     function pollTask(taskId, taskToken) {
@@ -616,7 +630,10 @@
           const qs = taskToken ? `?token=${encodeURIComponent(taskToken)}` : '';
           const data = await request(`/api/cdk/query/${encodeURIComponent(taskId)}${qs}`);
           const state = data.taskStatus || '';
-          showTask(taskId, data.accountEmail || emailInput.value.trim(), data.statusMessage || state);
+          const displayMessage = state === 'SUCCESS' || state === 'FAILED'
+            ? (data.statusMessage || state)
+            : withProcessingRetryTip(data.statusMessage || state);
+          showTask(taskId, data.accountEmail || emailInput.value.trim(), displayMessage);
           if (state === 'SUCCESS') {
             clearInterval(pollTimer);
             showMessage(resultMessage, 'success', data.statusMessage || '邀请已发送，请检查邮箱');
@@ -826,6 +843,20 @@
         };
       }
 
+      const PROCESSING_RETRY_TIP = '如果没反应，10分钟后CDK重置请重试';
+
+      function isProcessingState(status) {
+        return !['SUCCESS', 'FAILED'].includes(String(status || '').trim());
+      }
+
+      function withProcessingRetryTip(message) {
+        const text = String(message || '').trim();
+        if (!text || text.includes(PROCESSING_RETRY_TIP)) {
+          return text || PROCESSING_RETRY_TIP;
+        }
+        return `${text}。${PROCESSING_RETRY_TIP}`;
+      }
+
       function showTask(taskId, email, state) {
         taskCard.classList.add('show');
         document.getElementById('task-id').textContent = taskId || '--';
@@ -914,7 +945,7 @@
                 <span>CDK: <code>${escapeHtml(item.cardCode || '-')}</code></span>
                 <span>邮箱: <strong>${escapeHtml(item.email || '-')}</strong></span>
                 ${item.taskId ? `<span>任务: <code>${escapeHtml(item.taskId)}</code></span>` : ''}
-                <span>${escapeHtml(item.message || '')}</span>
+                <span>${escapeHtml(isProcessingState(item.status) ? withProcessingRetryTip(item.message || '处理中') : (item.message || ''))}</span>
               </div>
             </div>
           `;
@@ -949,7 +980,9 @@
             const data = await request(`/api/cdk/query/${encodeURIComponent(item.taskId)}${qs}`);
             item.status = data.taskStatus || item.status;
             item.email = data.accountEmail || item.email;
-            item.message = data.errorMessage || data.statusMessage || item.message;
+            item.message = isProcessingState(data.taskStatus)
+              ? withProcessingRetryTip(data.statusMessage || item.message || '处理中')
+              : (data.errorMessage || data.statusMessage || item.message);
           } catch {}
         }));
 
@@ -1123,8 +1156,8 @@
             }),
           });
 
-          showTask(data.data, emailInput.value.trim(), '排队中');
-          showMessage(resultMessage, '', '任务已提交，正在发送邀请...');
+          showTask(data.data, emailInput.value.trim(), withProcessingRetryTip('排队中'));
+          showMessage(resultMessage, '', withProcessingRetryTip('任务已提交，正在发送邀请...'));
           await refreshInventoryNotice();
           pollTask(data.data, data.taskToken || '');
         } catch (err) {
@@ -1143,7 +1176,10 @@
             const qs = taskToken ? `?token=${encodeURIComponent(taskToken)}` : '';
             const data = await request(`/api/cdk/query/${encodeURIComponent(taskId)}${qs}`);
             const state = data.taskStatus || '';
-            showTask(taskId, data.accountEmail || emailInput.value.trim(), data.statusMessage || state);
+            const displayMessage = isProcessingState(state)
+              ? withProcessingRetryTip(data.statusMessage || state)
+              : (data.statusMessage || state);
+            showTask(taskId, data.accountEmail || emailInput.value.trim(), displayMessage);
             if (state === 'SUCCESS') {
               clearInterval(pollTimer);
               pollTimer = null;
@@ -1214,7 +1250,7 @@
               taskId: item.taskId,
               taskToken: item.taskToken,
               status: 'PENDING',
-              message: '任务已提交，等待处理',
+              message: withProcessingRetryTip('任务已提交，等待处理'),
             })),
             ...(data.errors || []).map(item => ({
               lineNumber: item.lineNumber,
@@ -1238,8 +1274,8 @@
           }
 
           const queuedText = failedCount
-            ? `已提交 ${queuedCount} 条任务，${failedCount} 条提交失败，正在处理中...`
-            : `已提交 ${queuedCount} 条任务，正在处理中...`;
+            ? withProcessingRetryTip(`已提交 ${queuedCount} 条任务，${failedCount} 条提交失败，正在处理中...`)
+            : withProcessingRetryTip(`已提交 ${queuedCount} 条任务，正在处理中...`);
           showMessage(batchMessage, failedCount ? 'error' : '', queuedText);
 
           await refreshInventoryNotice();
