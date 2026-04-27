@@ -3342,6 +3342,18 @@ body::after {
   color: var(--text-primary);
 }
 
+#untracked-members-table thead th:first-child,
+#untracked-members-table tbody td:first-child {
+  width: 46px;
+  min-width: 46px;
+  text-align: center;
+}
+
+#untracked-members-table input[type="checkbox"] {
+  display: inline-block;
+  opacity: 1;
+}
+
 .workspace-results-meta {
   margin: 0 0 10px;
   padding: 9px 12px;
