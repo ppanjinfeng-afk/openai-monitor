@@ -1583,6 +1583,116 @@
         height: auto;
       }
     }
+
+    .announcement-card {
+      order: 3;
+      grid-column: 1 / -1;
+      position: relative;
+      overflow: hidden;
+      width: 100%;
+      border: 1px solid rgba(20, 32, 51, 0.06);
+      border-radius: 8px;
+      padding: 24px;
+      color: #ffffff;
+      background:
+        linear-gradient(150deg, rgba(17, 32, 55, 0.98), rgba(19, 53, 78, 0.96)),
+        #13253f;
+      box-shadow: 0 22px 58px rgba(14, 28, 48, 0.18);
+    }
+
+    .announcement-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(255,255,255,0.06) 1px, transparent 1px);
+      background-size: 42px 42px;
+      opacity: 0.18;
+      pointer-events: none;
+    }
+
+    .announcement-card > * {
+      position: relative;
+    }
+
+    .announcement-badge {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 8px;
+      padding: 7px 10px;
+      background: rgba(255, 255, 255, 0.09);
+      color: rgba(255, 255, 255, 0.86);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .announcement-card h2 {
+      margin: 22px 0 12px;
+      color: #ffffff;
+      font-size: 26px;
+      line-height: 1.18;
+    }
+
+    .announcement-card p {
+      margin: 0;
+      color: rgba(255, 255, 255, 0.76);
+      font-size: 14px;
+      line-height: 1.75;
+    }
+
+    .announcement-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 22px;
+    }
+
+    .announcement-item {
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.07);
+    }
+
+    .announcement-item b {
+      display: block;
+      margin-bottom: 6px;
+      color: #ffffff;
+      font-size: 14px;
+    }
+
+    .announcement-item span {
+      display: block;
+      color: rgba(255, 255, 255, 0.68);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    @media (min-width: 1760px) {
+      .layout {
+        position: relative;
+      }
+
+      .announcement-card {
+        position: absolute;
+        top: 0;
+        left: calc(100% + 24px);
+        grid-column: auto;
+        width: clamp(240px, calc((100vw - 1200px) / 2 - 36px), 320px);
+      }
+    }
+
+    @media (max-width: 620px) {
+      .announcement-card {
+        padding: 20px;
+      }
+
+      .announcement-card h2 {
+        font-size: 24px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1720,6 +1830,26 @@
           <div class="lookup-result" id="lookup-result"></div>
         </div>
       </div>
+
+      <aside class="announcement-card" aria-label="公告栏">
+        <span class="announcement-badge">公告栏</span>
+        <h2>购买前提示</h2>
+        <p>付款完成后系统会自动显示 CDK；如果页面没有自动刷新，可以在下方“订单找回”输入下单邮箱重新查询。</p>
+        <div class="announcement-list">
+          <div class="announcement-item">
+            <b>售后联系</b>
+            <span>付款了没发 CDK，请点右上角 TG / QQ 联系售后处理。</span>
+          </div>
+          <div class="announcement-item">
+            <b>网络卡顿</b>
+            <span>操作没动静可能是网络卡了，重新打开页面再试一次。</span>
+          </div>
+          <div class="announcement-item">
+            <b>使用建议</b>
+            <span>请正常用于写代码、接 Codex 等场景，不建议用于号池、跑注册机、中转。</span>
+          </div>
+        </div>
+      </aside>
     </section>
   </main>
 
