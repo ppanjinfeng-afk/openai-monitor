@@ -102,6 +102,12 @@
       pointer-events: none;
     }
     .product > * { position: relative; }
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
     .badge {
       display: inline-flex;
       width: fit-content;
@@ -1716,9 +1722,12 @@
     <section class="layout">
       <div class="product">
         <div>
-          <span class="badge">Team 邀请兑换</span>
+          <div class="badge-row">
+            <span class="badge">Team 邀请兑换</span>
+            <span class="badge">质保72小时</span>
+          </div>
           <h1>购买 CDK，自动获取 Team 邀请资格</h1>
-          <p>2 元起购买。下单后会打开支付宝支付二维码，付款确认后自动显示一次性 CDK。</p>
+          <p>6元起购。下单后会打开支付宝支付二维码，付款确认后自动显示一次性 CDK。</p>
           <div class="price">
             <strong id="price-text">--</strong>
             <span>每个 CDK</span>
