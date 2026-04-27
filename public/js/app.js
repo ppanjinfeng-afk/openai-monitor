@@ -28,6 +28,7 @@ const App = {
   memberCleanupLoading: false,
   memberCleanupSearchTimeout: null,
   untrackedMembersData: null,
+  untrackedMembersSelection: new Set(),
   untrackedMembersLoading: false,
   untrackedMembersSearchTimeout: null,
   checkoutToolsData: { summary: {}, items: [], filters: {} },
@@ -283,7 +284,7 @@ const App = {
         await this.loadMemberCleanup();
         break;
       case 'untracked-members':
-        await this.loadUntrackedMembers();
+        await Promise.all([this.loadUntrackedAutoKickSetting(), this.loadUntrackedMembers()]);
         break;
       case 'checkout-tools':
         await this.loadCheckoutTools();
@@ -936,9 +937,51 @@ const App = {
       const publicTunnelEnabled = settings.public_tunnel_enabled !== 'false';
       document.getElementById('public-tunnel-enabled').checked = publicTunnelEnabled;
       this.updatePublicTunnelStatus(publicTunnelEnabled);
+      this.applyUntrackedAutoKickSetting(settings);
       this.applyCdkPriceSetting(settings);
     } catch (err) {
       console.error('Failed to load settings:', err);
+    }
+  },
+
+  applyUntrackedAutoKickSetting(settings = {}) {
+    const checkbox = document.getElementById('untracked-auto-kick-enabled');
+    const status = document.getElementById('untracked-auto-kick-status');
+    const enabled = settings.untracked_members_auto_kick_enabled === 'true';
+
+    if (checkbox) {
+      checkbox.checked = enabled;
+    }
+
+    if (status) {
+      status.className = `quota-sync-badge ${enabled ? 'warning' : 'skipped'}`;
+      status.textContent = enabled ? '自动踢人已开启' : '自动踢人已关闭';
+    }
+  },
+
+  async loadUntrackedAutoKickSetting() {
+    try {
+      const settings = await API.getSettings();
+      this.applyUntrackedAutoKickSetting(settings);
+    } catch (err) {
+      console.error('Failed to load untracked auto kick setting:', err);
+    }
+  },
+
+  async saveUntrackedAutoKickSetting() {
+    const checkbox = document.getElementById('untracked-auto-kick-enabled');
+    if (!checkbox) {
+      return;
+    }
+
+    try {
+      const settings = await API.updateSettings({
+        untracked_members_auto_kick_enabled: checkbox.checked ? 'true' : 'false',
+      });
+      this.applyUntrackedAutoKickSetting(settings);
+      this.toast(checkbox.checked ? '没有来源记录自动踢人已开启' : '没有来源记录自动踢人已关闭', 'success');
+    } catch (err) {
+      this.toast(`保存自动踢人开关失败: ${err.message}`, 'error');
     }
   },
 
@@ -2709,6 +2752,59 @@ const App = {
     };
   },
 
+  makeUntrackedMembersSelectionKey(item) {
+    return [
+      Number(item?.account_id || 0),
+      String(item?.workspace_id || ''),
+      String(item?.user_id || item?.email || ''),
+    ].join('::');
+  },
+
+  normalizeUntrackedMembersData(data) {
+    const items = (Array.isArray(data?.items) ? data.items : []).map(item => ({
+      ...item,
+      selection_key: this.makeUntrackedMembersSelectionKey(item),
+    }));
+
+    return {
+      ...data,
+      items,
+      summary: data?.summary || {},
+      filters: data?.filters || {},
+    };
+  },
+
+  updateUntrackedMembersActionButtons() {
+    const meta = document.getElementById('untracked-members-meta');
+    const btnSelectAll = document.getElementById('btn-untracked-members-select-all');
+    const btnClear = document.getElementById('btn-untracked-members-clear-selection');
+    const btnKick = document.getElementById('btn-untracked-members-kick-selected');
+    const items = Array.isArray(this.untrackedMembersData?.items) ? this.untrackedMembersData.items : [];
+    const selectableItems = items.filter(item => !Number(item.is_owner || 0) && item.account_id && item.user_id);
+    const selectedItems = items.filter(item => this.untrackedMembersSelection.has(item.selection_key));
+    const allSelected = selectableItems.length > 0 && selectableItems.every(item => this.untrackedMembersSelection.has(item.selection_key));
+
+    if (meta) {
+      if (this.untrackedMembersLoading && !this.untrackedMembersData) {
+        meta.textContent = '正在读取没有来源记录的成员...';
+      } else {
+        meta.textContent = `当前 ${items.length} 条没有来源记录的成员 · 可踢出 ${selectableItems.length} · 已选 ${selectedItems.length}`;
+      }
+    }
+
+    if (btnSelectAll) {
+      btnSelectAll.disabled = selectableItems.length === 0;
+      btnSelectAll.innerHTML = `<span>${allSelected ? '取消全选' : `全选当前筛选${selectableItems.length > 0 ? ` (${selectableItems.length})` : ''}`}</span>`;
+    }
+    if (btnClear) {
+      btnClear.disabled = this.untrackedMembersSelection.size === 0;
+    }
+    if (btnKick) {
+      btnKick.disabled = selectedItems.length === 0;
+      btnKick.innerHTML = `<span>踢出已选${selectedItems.length > 0 ? ` (${selectedItems.length})` : ''}</span>`;
+    }
+  },
+
   renderUntrackedMembers() {
     const summaryHost = document.getElementById('untracked-members-summary');
     const table = document.getElementById('untracked-members-table');
@@ -2784,6 +2880,239 @@ const App = {
         this.renderUntrackedMembers();
       }
     });
+  },
+
+  renderUntrackedMembers() {
+    const summaryHost = document.getElementById('untracked-members-summary');
+    const table = document.getElementById('untracked-members-table');
+    const tbody = document.getElementById('untracked-members-tbody');
+    const empty = document.getElementById('untracked-members-empty');
+
+    if (!summaryHost || !table || !tbody || !empty) {
+      return;
+    }
+
+    if (this.untrackedMembersLoading && !this.untrackedMembersData) {
+      summaryHost.innerHTML = '';
+      table.classList.add('hidden');
+      empty.classList.remove('hidden');
+      empty.innerHTML = '<p>正在读取没有来源记录的成员...</p>';
+      this.updateUntrackedMembersActionButtons();
+      return;
+    }
+
+    if (!this.untrackedMembersData) {
+      summaryHost.innerHTML = '';
+      table.classList.add('hidden');
+      empty.classList.remove('hidden');
+      empty.innerHTML = '<p>暂无数据，请先同步工作区</p>';
+      this.updateUntrackedMembersActionButtons();
+      return;
+    }
+
+    const summary = this.untrackedMembersData.summary || {};
+    const items = Array.isArray(this.untrackedMembersData.items) ? this.untrackedMembersData.items : [];
+    const total = summary.total || items.length || 0;
+
+    summaryHost.innerHTML = [
+      Components.workspaceSummaryCard('没有来源记录', total, total > 0 ? 'warning' : 'success', '未匹配到来源的成员'),
+      Components.workspaceSummaryCard('可踢出成员', summary.removable_members || 0, (summary.removable_members || 0) > 0 ? 'danger' : 'neutral', '已自动排除所有者'),
+      Components.workspaceSummaryCard('涉及工作区', summary.workspaces || 0, (summary.workspaces || 0) > 0 ? 'accent' : 'neutral', '按工作区去重'),
+      Components.workspaceSummaryCard('涉及账号', summary.accounts || 0, (summary.accounts || 0) > 0 ? 'accent' : 'neutral', '按所属账号去重'),
+    ].join('');
+
+    if (items.length === 0) {
+      table.classList.add('hidden');
+      empty.classList.remove('hidden');
+      empty.innerHTML = '<p>当前没有发现无来源记录的成员</p>';
+      tbody.innerHTML = '';
+      this.updateUntrackedMembersActionButtons();
+      return;
+    }
+
+    table.classList.remove('hidden');
+    empty.classList.add('hidden');
+    tbody.innerHTML = items
+      .map(item => Components.untrackedMemberRow(item, this.untrackedMembersSelection.has(item.selection_key)))
+      .join('');
+    this.updateUntrackedMembersActionButtons();
+  },
+
+  async loadUntrackedMembers(options = {}) {
+    const filters = this.getUntrackedMembersFilters();
+    const requestKey = `untracked-members:${JSON.stringify(filters)}`;
+    this.untrackedMembersLoading = true;
+    this.renderUntrackedMembers();
+
+    return this.runSingleFlight(requestKey, async () => {
+      try {
+        this.untrackedMembersData = this.normalizeUntrackedMembersData(await API.getUntrackedMembers(filters));
+        const validKeys = new Set(this.untrackedMembersData.items.map(item => item.selection_key));
+        this.untrackedMembersSelection = new Set(
+          [...this.untrackedMembersSelection].filter(key => validKeys.has(key))
+        );
+      } catch (err) {
+        console.error('Failed to load untracked members:', err);
+        this.untrackedMembersData = null;
+        if (!options.silent) {
+          this.toast(`没有记录来源列表加载失败: ${err.message}`, 'error');
+        }
+      } finally {
+        this.untrackedMembersLoading = false;
+        this.renderUntrackedMembers();
+      }
+    });
+  },
+
+  toggleUntrackedMembersSelection(key, checked) {
+    if (!key) {
+      return;
+    }
+
+    if (checked) {
+      this.untrackedMembersSelection.add(key);
+    } else {
+      this.untrackedMembersSelection.delete(key);
+    }
+
+    this.renderUntrackedMembers();
+  },
+
+  toggleUntrackedMembersSelectAll() {
+    const items = (Array.isArray(this.untrackedMembersData?.items) ? this.untrackedMembersData.items : [])
+      .filter(item => !Number(item.is_owner || 0) && item.account_id && item.user_id);
+
+    const allSelected = items.length > 0 && items.every(item => this.untrackedMembersSelection.has(item.selection_key));
+    if (allSelected) {
+      items.forEach(item => this.untrackedMembersSelection.delete(item.selection_key));
+    } else {
+      items.forEach(item => this.untrackedMembersSelection.add(item.selection_key));
+    }
+
+    this.renderUntrackedMembers();
+  },
+
+  clearUntrackedMembersSelection() {
+    this.untrackedMembersSelection = new Set();
+    this.renderUntrackedMembers();
+  },
+
+  async refreshUntrackedMembersSurfaces(workspaceRowIds = []) {
+    await this.syncMemberCleanupWorkspaces(workspaceRowIds);
+    await Promise.all([
+      this.loadUntrackedMembers({ silent: true }),
+      this.loadAccounts(this.currentAccountsPage),
+      this.loadStats(),
+      this.loadWorkspaces(this.currentWorkspacesPage),
+      this.loadWorkspaceDashboard(),
+    ]);
+  },
+
+  async removeUntrackedMemberItem(accountId, userId, workspaceId = '', workspaceName = '', planType = '', memberEmail = '', workspaceRowId = 0) {
+    const label = memberEmail || userId;
+    const workspaceLabel = workspaceName || workspaceId || '当前工作区';
+    if (!confirm(`确定要把 ${label} 从 ${workspaceLabel} 踢出吗？`)) {
+      return;
+    }
+
+    try {
+      await API.removeMember(accountId, userId, {
+        workspace_id: workspaceId,
+        workspace_name: workspaceName,
+        plan_type: planType,
+        skip_sync: '1',
+      });
+      this.untrackedMembersSelection = new Set();
+      this.toast(`已移出 ${label}`, 'success');
+      await this.refreshUntrackedMembersSurfaces([workspaceRowId]);
+    } catch (err) {
+      this.toast(`踢出成员失败: ${err.message}`, 'error');
+    }
+  },
+
+  async removeSelectedUntrackedMembers() {
+    const members = (Array.isArray(this.untrackedMembersData?.items) ? this.untrackedMembersData.items : [])
+      .filter(item => this.untrackedMembersSelection.has(item.selection_key))
+      .filter(item => !Number(item.is_owner || 0) && item.account_id && item.user_id);
+
+    if (members.length === 0) {
+      this.toast('请先勾选要踢出的成员', 'warning');
+      return;
+    }
+
+    if (!confirm(`确定踢出已选中的 ${members.length} 个没有来源记录的成员吗？`)) {
+      return;
+    }
+
+    const button = document.getElementById('btn-untracked-members-kick-selected');
+    if (button) {
+      button.disabled = true;
+      button.classList.add('loading');
+    }
+
+    let successCount = 0;
+    const failed = [];
+    const workspaceRows = new Set();
+
+    try {
+      for (const member of members) {
+        try {
+          await API.removeMember(member.account_id, member.user_id, {
+            workspace_id: member.workspace_id,
+            workspace_name: member.workspace_name || member.workspace_id,
+            plan_type: member.plan_type || '',
+            skip_sync: '1',
+          });
+          if (member.workspace_row_id) {
+            workspaceRows.add(Number(member.workspace_row_id));
+          }
+          successCount += 1;
+        } catch (err) {
+          failed.push(`${member.email || member.user_id}: ${err.message}`);
+        }
+      }
+
+      this.untrackedMembersSelection = new Set();
+      await this.refreshUntrackedMembersSurfaces(Array.from(workspaceRows));
+
+      if (failed.length === 0) {
+        this.toast(`踢出完成，成功 ${successCount} 个`, 'success');
+      } else {
+        this.toast(`踢出完成，成功 ${successCount} 个，失败 ${failed.length} 个`, 'warning');
+        console.warn('Untracked member bulk remove failures:', failed);
+      }
+    } finally {
+      if (button) {
+        button.classList.remove('loading');
+      }
+      this.renderUntrackedMembers();
+    }
+  },
+
+  async runUntrackedAutoKickNow() {
+    if (!confirm('确定立即执行一次“没有来源记录自动踢人”吗？')) {
+      return;
+    }
+
+    const button = document.getElementById('btn-run-untracked-auto-kick');
+    if (button) {
+      button.disabled = true;
+      button.classList.add('loading');
+    }
+
+    try {
+      const result = await API.runUntrackedAutoKick();
+      this.untrackedMembersSelection = new Set();
+      await this.loadUntrackedMembers({ silent: true });
+      this.toast(`自动踢人完成：成功 ${result.removed || 0} 个，失败 ${result.failed || 0} 个`, result.failed ? 'warning' : 'success');
+    } catch (err) {
+      this.toast(`自动踢人失败: ${err.message}`, 'error');
+    } finally {
+      if (button) {
+        button.classList.remove('loading');
+      }
+      this.renderUntrackedMembers();
+    }
   },
 
   toggleMemberCleanupSelection(key, checked) {
@@ -4122,6 +4451,7 @@ const App = {
       untrackedMembersSearchInput.addEventListener('input', () => {
         clearTimeout(this.untrackedMembersSearchTimeout);
         this.untrackedMembersSearchTimeout = setTimeout(() => {
+          this.untrackedMembersSelection = new Set();
           this.loadUntrackedMembers();
         }, 300);
       });
@@ -4139,6 +4469,41 @@ const App = {
       btnSyncUntrackedMembers.addEventListener('click', async () => {
         await this.syncAllWorkspaces();
         await this.loadUntrackedMembers();
+      });
+    }
+
+    const untrackedAutoKickEnabled = document.getElementById('untracked-auto-kick-enabled');
+    if (untrackedAutoKickEnabled) {
+      untrackedAutoKickEnabled.addEventListener('change', () => {
+        this.saveUntrackedAutoKickSetting();
+      });
+    }
+
+    const btnRunUntrackedAutoKick = document.getElementById('btn-run-untracked-auto-kick');
+    if (btnRunUntrackedAutoKick) {
+      btnRunUntrackedAutoKick.addEventListener('click', () => {
+        this.runUntrackedAutoKickNow();
+      });
+    }
+
+    const btnUntrackedMembersSelectAll = document.getElementById('btn-untracked-members-select-all');
+    if (btnUntrackedMembersSelectAll) {
+      btnUntrackedMembersSelectAll.addEventListener('click', () => {
+        this.toggleUntrackedMembersSelectAll();
+      });
+    }
+
+    const btnUntrackedMembersClearSelection = document.getElementById('btn-untracked-members-clear-selection');
+    if (btnUntrackedMembersClearSelection) {
+      btnUntrackedMembersClearSelection.addEventListener('click', () => {
+        this.clearUntrackedMembersSelection();
+      });
+    }
+
+    const btnUntrackedMembersKickSelected = document.getElementById('btn-untracked-members-kick-selected');
+    if (btnUntrackedMembersKickSelected) {
+      btnUntrackedMembersKickSelected.addEventListener('click', () => {
+        this.removeSelectedUntrackedMembers();
       });
     }
 

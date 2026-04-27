@@ -862,18 +862,25 @@
 
                   <div class="member-cleanup-selection-bar">
                     <div class="member-cleanup-selection-meta" id="untracked-members-meta">正在读取没有来源记录的成员...</div>
+                    <div class="member-table-actions">
+                      <button class="btn btn-secondary" id="btn-untracked-members-select-all">全选当前筛选</button>
+                      <button class="btn btn-ghost" id="btn-untracked-members-clear-selection">清空勾选</button>
+                      <button class="btn btn-danger" id="btn-untracked-members-kick-selected" disabled>踢出已选</button>
+                    </div>
                   </div>
 
                   <div class="accounts-table-wrapper section-spacer-top">
                     <table class="accounts-table hidden" id="untracked-members-table">
                       <thead>
                         <tr>
+                          <th></th>
                           <th>邮箱 / 名称</th>
                           <th>所属账号</th>
                           <th>工作区</th>
                           <th>角色</th>
                           <th>加入时间</th>
                           <th>判断原因</th>
+                          <th>操作</th>
                         </tr>
                       </thead>
                       <tbody id="untracked-members-tbody"></tbody>
@@ -905,6 +912,32 @@
                   </div>
                   <div class="dashboard-alert-item accent section-spacer-top">
                     <div class="dashboard-alert-detail">如果刚同步过工作区或刚完成激活，建议点“同步工作区”后再刷新一次。</div>
+                  </div>
+                </div>
+              </div>
+              <div class="panel section-spacer-top">
+                <div class="panel-header">
+                  <h2>自动处理</h2>
+                </div>
+                <div class="panel-body">
+                  <div class="form-group">
+                    <label class="toggle-label">
+                      <input type="checkbox" id="untracked-auto-kick-enabled">
+                      <span class="toggle-switch"></span>
+                      <span>自动踢出没有来源记录的人</span>
+                    </label>
+                  </div>
+                  <div class="form-group">
+                    <label>当前状态</label>
+                    <div class="surface-chip-row">
+                      <span class="quota-sync-badge skipped" id="untracked-auto-kick-status">自动踢人已关闭</span>
+                    </div>
+                  </div>
+                  <div class="dashboard-alert-item danger">
+                    <div class="dashboard-alert-detail">打开后，系统每次同步检查完工作区，会自动踢出列表里可移出的成员；所有者不会被踢出。</div>
+                  </div>
+                  <div class="form-actions compact-form-actions section-spacer-top">
+                    <button class="btn btn-danger" id="btn-run-untracked-auto-kick">立即执行一次</button>
                   </div>
                 </div>
               </div>

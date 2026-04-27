@@ -30,6 +30,7 @@ router.put('/', (req, res) => {
     'invite_cooldown_minutes',
     'public_tunnel_enabled',
     'cdk_team_price_cents',
+    'untracked_members_auto_kick_enabled',
   ];
 
   const updateAll = db.transaction(() => {

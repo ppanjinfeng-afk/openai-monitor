@@ -181,6 +181,13 @@ const API = {
     return this.request(`/api/workspaces/untracked-members${qs ? `?${qs}` : ''}`);
   },
 
+  runUntrackedAutoKick(limit = 100) {
+    return this.request('/api/workspaces/untracked-members/auto-kick', {
+      method: 'POST',
+      body: JSON.stringify({ limit }),
+    });
+  },
+
   syncAllWorkspaces() {
     return this.request('/api/workspaces/sync', {
       method: 'POST',

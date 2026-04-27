@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db');
 const workspaceSync = require('../services/workspace-sync');
 const memberOverflowRebalance = require('../services/member-overflow-rebalance');
+const untrackedMemberCleanup = require('../services/untracked-member-cleanup');
 const { categoryLabel, classifyFailure } = require('../services/failure-utils');
 
 const router = express.Router();
@@ -626,6 +627,23 @@ router.get('/member-cleanup', (req, res) => {
 });
 
 router.get('/untracked-members', (req, res) => {
+  return res.json(untrackedMemberCleanup.getUntrackedMembers({
+    search: req.query.search || '',
+  }));
+});
+
+router.post('/untracked-members/auto-kick', async (req, res) => {
+  try {
+    const result = await untrackedMemberCleanup.autoKickUntrackedMembers({
+      limit: req.body?.limit,
+    });
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/untracked-members-legacy', (req, res) => {
   const search = String(req.query.search || '').trim().toLowerCase();
   const searchLike = `%${search}%`;
   const searchWhere = search

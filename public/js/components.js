@@ -1928,14 +1928,32 @@ user2@example.com,pass456,\u8d26\u53f72'></textarea>
     `;
   },
 
-  untrackedMemberRow(item) {
+  untrackedMemberRow(item, selected = false) {
+    const canKick = !Number(item.is_owner || 0) && item.account_id && item.user_id;
     const roleParts = [
       item.role ? this.quotaPill(this.memberRoleLabel(item.role), 'neutral') : '',
       item.seat_type ? this.quotaPill(this.seatTypeLabel(item.seat_type), 'accent') : '',
     ].filter(Boolean).join('');
 
+    const actionButtons = [
+      item.workspace_id
+        ? `<button class="member-inline-btn" onclick="App.jumpToWorkspace(${this.jsString(item.workspace_id)}, ${this.jsString(item.workspace_name || item.workspace_id || '')})">定位</button>`
+        : '',
+      canKick
+        ? `<button class="member-inline-btn danger" onclick="App.removeUntrackedMemberItem(${Number(item.account_id || 0)}, ${this.jsString(item.user_id || '')}, ${this.jsString(item.workspace_id || '')}, ${this.jsString(item.workspace_name || item.workspace_id || '')}, ${this.jsString(item.plan_type || '')}, ${this.jsString(item.email || '')}, ${Number(item.workspace_row_id || 0)})">踢出</button>`
+        : '',
+    ].filter(Boolean).join('');
+
     return `
-      <tr>
+      <tr class="${selected ? 'member-cleanup-row-selected' : ''}">
+        <td>
+          <input
+            type="checkbox"
+            ${selected ? 'checked' : ''}
+            ${canKick ? '' : 'disabled'}
+            onchange="App.toggleUntrackedMembersSelection(${this.jsString(item.selection_key)}, this.checked)"
+          >
+        </td>
         <td>
           <div class="member-cleanup-email">
             <strong class="cell-title">${this.escapeHtml(item.email || '-')}</strong>
@@ -1967,6 +1985,11 @@ user2@example.com,pass456,\u8d26\u53f72'></textarea>
         </td>
         <td>
           <span class="text-muted text-xs">${this.escapeHtml(item.source_message || '没有匹配到来源记录')}</span>
+        </td>
+        <td>
+          <div class="member-table-actions">
+            ${actionButtons || '<span class="text-muted text-xs">暂无操作</span>'}
+          </div>
         </td>
       </tr>
     `;
