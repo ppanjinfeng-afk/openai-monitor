@@ -27,6 +27,9 @@ const App = {
   memberCleanupSelection: new Set(),
   memberCleanupLoading: false,
   memberCleanupSearchTimeout: null,
+  untrackedMembersData: null,
+  untrackedMembersLoading: false,
+  untrackedMembersSearchTimeout: null,
   checkoutToolsData: { summary: {}, items: [], filters: {} },
   lastCheckoutToolResult: null,
   currentModalType: null,
@@ -279,6 +282,9 @@ const App = {
       case 'member-cleanup':
         await this.loadMemberCleanup();
         break;
+      case 'untracked-members':
+        await this.loadUntrackedMembers();
+        break;
       case 'checkout-tools':
         await this.loadCheckoutTools();
         break;
@@ -403,6 +409,7 @@ const App = {
     logs: '检查日志',
     'cdk-manage': 'CDK 管理',
     'member-cleanup': '成员清理',
+    'untracked-members': '没有记录来源',
     'checkout-tools': '结账工具',
     settings: '设置',
   },
@@ -2696,6 +2703,89 @@ const App = {
     });
   },
 
+  getUntrackedMembersFilters() {
+    return {
+      search: document.getElementById('untracked-members-search-input')?.value.trim() || '',
+    };
+  },
+
+  renderUntrackedMembers() {
+    const summaryHost = document.getElementById('untracked-members-summary');
+    const table = document.getElementById('untracked-members-table');
+    const tbody = document.getElementById('untracked-members-tbody');
+    const empty = document.getElementById('untracked-members-empty');
+    const meta = document.getElementById('untracked-members-meta');
+
+    if (!summaryHost || !table || !tbody || !empty) {
+      return;
+    }
+
+    if (this.untrackedMembersLoading && !this.untrackedMembersData) {
+      summaryHost.innerHTML = '';
+      table.classList.add('hidden');
+      empty.classList.remove('hidden');
+      empty.innerHTML = '<p>正在读取没有来源记录的成员...</p>';
+      if (meta) meta.textContent = '正在读取没有来源记录的成员...';
+      return;
+    }
+
+    if (!this.untrackedMembersData) {
+      summaryHost.innerHTML = '';
+      table.classList.add('hidden');
+      empty.classList.remove('hidden');
+      empty.innerHTML = '<p>暂无数据，请先同步工作区</p>';
+      if (meta) meta.textContent = '暂无没有来源记录的数据';
+      return;
+    }
+
+    const summary = this.untrackedMembersData.summary || {};
+    const items = Array.isArray(this.untrackedMembersData.items) ? this.untrackedMembersData.items : [];
+
+    summaryHost.innerHTML = [
+      Components.workspaceSummaryCard('没有来源记录', summary.total || items.length || 0, (summary.total || items.length || 0) > 0 ? 'warning' : 'success', '未匹配到来源的成员'),
+      Components.workspaceSummaryCard('涉及工作区', summary.workspaces || 0, (summary.workspaces || 0) > 0 ? 'accent' : 'neutral', '按工作区去重'),
+      Components.workspaceSummaryCard('涉及账号', summary.accounts || 0, (summary.accounts || 0) > 0 ? 'accent' : 'neutral', '按所属账号去重'),
+    ].join('');
+
+    if (meta) {
+      meta.textContent = `当前 ${items.length} 条没有来源记录的成员`;
+    }
+
+    if (items.length === 0) {
+      table.classList.add('hidden');
+      empty.classList.remove('hidden');
+      empty.innerHTML = '<p>当前没有发现无来源记录的成员</p>';
+      tbody.innerHTML = '';
+      return;
+    }
+
+    table.classList.remove('hidden');
+    empty.classList.add('hidden');
+    tbody.innerHTML = items.map(item => Components.untrackedMemberRow(item)).join('');
+  },
+
+  async loadUntrackedMembers(options = {}) {
+    const filters = this.getUntrackedMembersFilters();
+    const requestKey = `untracked-members:${JSON.stringify(filters)}`;
+    this.untrackedMembersLoading = true;
+    this.renderUntrackedMembers();
+
+    return this.runSingleFlight(requestKey, async () => {
+      try {
+        this.untrackedMembersData = await API.getUntrackedMembers(filters);
+      } catch (err) {
+        console.error('Failed to load untracked members:', err);
+        this.untrackedMembersData = null;
+        if (!options.silent) {
+          this.toast(`没有记录来源列表加载失败: ${err.message}`, 'error');
+        }
+      } finally {
+        this.untrackedMembersLoading = false;
+        this.renderUntrackedMembers();
+      }
+    });
+  },
+
   toggleMemberCleanupSelection(key, checked) {
     if (!key) {
       return;
@@ -4024,6 +4114,31 @@ const App = {
     if (btnMemberCleanupRevokeSelected) {
       btnMemberCleanupRevokeSelected.addEventListener('click', () => {
         this.revokeSelectedMemberCleanupInvites();
+      });
+    }
+
+    const untrackedMembersSearchInput = document.getElementById('untracked-members-search-input');
+    if (untrackedMembersSearchInput) {
+      untrackedMembersSearchInput.addEventListener('input', () => {
+        clearTimeout(this.untrackedMembersSearchTimeout);
+        this.untrackedMembersSearchTimeout = setTimeout(() => {
+          this.loadUntrackedMembers();
+        }, 300);
+      });
+    }
+
+    const btnRefreshUntrackedMembers = document.getElementById('btn-refresh-untracked-members');
+    if (btnRefreshUntrackedMembers) {
+      btnRefreshUntrackedMembers.addEventListener('click', () => {
+        this.loadUntrackedMembers();
+      });
+    }
+
+    const btnSyncUntrackedMembers = document.getElementById('btn-sync-untracked-members');
+    if (btnSyncUntrackedMembers) {
+      btnSyncUntrackedMembers.addEventListener('click', async () => {
+        await this.syncAllWorkspaces();
+        await this.loadUntrackedMembers();
       });
     }
 

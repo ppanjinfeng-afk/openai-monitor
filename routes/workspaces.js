@@ -625,6 +625,104 @@ router.get('/member-cleanup', (req, res) => {
   });
 });
 
+router.get('/untracked-members', (req, res) => {
+  const search = String(req.query.search || '').trim().toLowerCase();
+  const searchLike = `%${search}%`;
+  const searchWhere = search
+    ? `AND (
+        LOWER(m.email) LIKE ?
+        OR LOWER(COALESCE(m.name, '')) LIKE ?
+        OR LOWER(COALESCE(m.account_email, '')) LIKE ?
+        OR LOWER(COALESCE(m.workspace_name, '')) LIKE ?
+        OR LOWER(COALESCE(m.workspace_id, '')) LIKE ?
+      )`
+    : '';
+  const params = search ? [searchLike, searchLike, searchLike, searchLike, searchLike] : [];
+
+  const sourceCte = `
+    WITH active_members AS (
+      SELECT
+        wm.id,
+        LOWER(TRIM(wm.email)) AS email_key,
+        wm.account_id,
+        a.email AS account_email,
+        w.id AS workspace_row_id,
+        wm.workspace_id,
+        w.workspace_name,
+        w.plan_type,
+        wm.user_id,
+        wm.account_user_id,
+        wm.email,
+        wm.name,
+        wm.role,
+        wm.seat_type,
+        wm.is_owner,
+        wm.joined_at,
+        wm.last_synced_at
+      FROM workspace_members wm
+      JOIN workspaces w ON w.workspace_id = wm.workspace_id AND w.account_id = wm.account_id
+      JOIN accounts a ON a.id = wm.account_id
+      WHERE a.status = 'active'
+        AND a.access_token IS NOT NULL
+        AND a.access_token != ''
+        AND COALESCE(wm.deactivated_time, '') = ''
+        AND COALESCE(wm.email, '') != ''
+        AND COALESCE(wm.is_owner, 0) = 0
+    ),
+    known_sources AS (
+      SELECT DISTINCT LOWER(TRIM(assigned_email)) AS email_key
+      FROM cdk_cards
+      WHERE COALESCE(assigned_email, '') != ''
+      UNION
+      SELECT DISTINCT LOWER(TRIM(buyer_email)) AS email_key
+      FROM cdk_cards
+      WHERE COALESCE(buyer_email, '') != ''
+      UNION
+      SELECT DISTINCT LOWER(TRIM(target_email)) AS email_key
+      FROM cdk_order_items
+      WHERE COALESCE(target_email, '') != ''
+      UNION
+      SELECT DISTINCT LOWER(TRIM(account_email)) AS email_key
+      FROM cdk_tasks
+      WHERE COALESCE(account_email, '') != ''
+      UNION
+      SELECT DISTINCT LOWER(TRIM(target_email)) AS email_key
+      FROM invites
+      WHERE COALESCE(target_email, '') != ''
+        AND COALESCE(status, '') != 'error'
+        AND COALESCE(failure_category, '') = ''
+    )
+  `;
+
+  const fromSql = `
+    FROM active_members m
+    LEFT JOIN known_sources s ON s.email_key = m.email_key
+    WHERE s.email_key IS NULL
+      ${searchWhere}
+  `;
+
+  const count = db.prepare(`${sourceCte} SELECT COUNT(*) AS count ${fromSql}`).get(...params)?.count || 0;
+  const items = db.prepare(`
+    ${sourceCte}
+    SELECT
+      m.*,
+      '没有匹配到 CDK、订单、激活任务或平台邀请记录' AS source_message
+    ${fromSql}
+    ORDER BY datetime(m.joined_at) DESC, LOWER(m.email) ASC, m.workspace_name ASC
+  `).all(...params);
+
+  return res.json({
+    filters: { search },
+    summary: {
+      total: count,
+      members: items.length,
+      workspaces: new Set(items.map(item => item.workspace_id).filter(Boolean)).size,
+      accounts: new Set(items.map(item => item.account_id).filter(Boolean)).size,
+    },
+    items,
+  });
+});
+
 router.get('/dashboard', (req, res) => {
   const alerts = [];
 

@@ -1928,6 +1928,50 @@ user2@example.com,pass456,\u8d26\u53f72'></textarea>
     `;
   },
 
+  untrackedMemberRow(item) {
+    const roleParts = [
+      item.role ? this.quotaPill(this.memberRoleLabel(item.role), 'neutral') : '',
+      item.seat_type ? this.quotaPill(this.seatTypeLabel(item.seat_type), 'accent') : '',
+    ].filter(Boolean).join('');
+
+    return `
+      <tr>
+        <td>
+          <div class="member-cleanup-email">
+            <strong class="cell-title">${this.escapeHtml(item.email || '-')}</strong>
+            <span class="text-muted text-xs">${this.escapeHtml(item.name || '未命名成员')}</span>
+          </div>
+        </td>
+        <td>
+          <div class="stack-col-sm">
+            <span>${this.escapeHtml(item.account_email || '')}</span>
+            <span class="text-muted text-xs">${this.escapeHtml(item.plan_type || '')}</span>
+          </div>
+        </td>
+        <td>
+          <div class="stack-col-sm">
+            <span>${this.escapeHtml(item.workspace_name || item.workspace_id || '-')}</span>
+            <span class="text-muted text-xs">${this.escapeHtml(item.workspace_id || '')}</span>
+          </div>
+        </td>
+        <td>
+          <div class="surface-chip-row member-cleanup-role">
+            ${roleParts || this.quotaPill('成员', 'neutral')}
+          </div>
+        </td>
+        <td>
+          <div class="member-cleanup-time">
+            <strong>${this.escapeHtml(this.formatDateTime(item.joined_at))}</strong>
+            <span class="text-muted text-xs">${this.escapeHtml(this.timeAgo(item.joined_at))}</span>
+          </div>
+        </td>
+        <td>
+          <span class="text-muted text-xs">${this.escapeHtml(item.source_message || '没有匹配到来源记录')}</span>
+        </td>
+      </tr>
+    `;
+  },
+
   membersModal(account, state = {}) {
     const members = Array.isArray(state.members) ? state.members : [];
     const total = Number(state.total || members.length || 0);

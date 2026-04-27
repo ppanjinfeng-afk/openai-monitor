@@ -176,6 +176,11 @@ const API = {
     return this.request(`/api/workspaces/member-cleanup${qs ? `?${qs}` : ''}`);
   },
 
+  getUntrackedMembers(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/api/workspaces/untracked-members${qs ? `?${qs}` : ''}`);
+  },
+
   syncAllWorkspaces() {
     return this.request('/api/workspaces/sync', {
       method: 'POST',
