@@ -29,6 +29,7 @@ const ADMIN_SESSION_COOKIE = 'openai_monitor_admin_session';
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const publicDir = path.join(__dirname, 'public');
 const maintenancePagePath = path.join(__dirname, 'public', 'maintenance.html');
+const activationOnlyPagePath = path.join(__dirname, 'public', 'activation-only.html');
 const getSettingValueStmt = db.prepare('SELECT value FROM settings WHERE key = ?');
 
 function isPublicHost(req) {
@@ -632,8 +633,15 @@ app.use((req, res, next) => {
     return sendPublicMaintenance(req, res);
   }
 
-  if (req.isActivationOnlyPublicHost && (req.path === '/' || req.path === '/buy' || req.path === '/buy.html')) {
-    return res.redirect(302, '/join');
+  if (req.isActivationOnlyPublicHost) {
+    const isReadMethod = req.method === 'GET' || req.method === 'HEAD';
+    if (isReadMethod && ['/', '/join', '/join.html'].includes(req.path)) {
+      res.setHeader('Cache-Control', 'no-store');
+      return res.sendFile(activationOnlyPagePath);
+    }
+    if (isReadMethod && ['/buy', '/buy.html'].includes(req.path)) {
+      return res.redirect(302, '/');
+    }
   }
 
   if (req.path === '/') {

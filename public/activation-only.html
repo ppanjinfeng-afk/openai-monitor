@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>激活 Team CDK</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    :root {
+      --page: #f3f7fc;
+      --ink: #07172d;
+      --muted: #52627a;
+      --line: #d8e2f1;
+      --blue: #2563eb;
+      --blue-soft: #eef5ff;
+      --green: #10b981;
+      --green-soft: #eafaf2;
+      --red: #dc2626;
+      --red-soft: #fff1f2;
+      --card: #ffffff;
+      --navy: #132940;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 14% 12%, rgba(37, 99, 235, 0.08), transparent 30%),
+        radial-gradient(circle at 88% 36%, rgba(15, 118, 110, 0.08), transparent 34%),
+        var(--page);
+    }
+
+    .page {
+      width: min(1160px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 16px 0 32px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(320px, 0.92fr) minmax(360px, 1.08fr);
+      gap: 24px;
+      align-items: start;
+    }
+
+    .hero {
+      min-height: 516px;
+      border-radius: 8px;
+      padding: 28px;
+      color: #fff;
+      background: var(--navy);
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 22px 50px rgba(13, 34, 57, 0.18);
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0)),
+        radial-gradient(circle at 28% 20%, rgba(47, 111, 217, 0.34), transparent 32%),
+        radial-gradient(circle at 72% 76%, rgba(20, 184, 166, 0.24), transparent 34%);
+      pointer-events: none;
+    }
+
+    .hero > * { position: relative; }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      padding: 0 12px;
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.9);
+      font-weight: 900;
+      font-size: 14px;
+    }
+
+    .hero h1 {
+      margin: 42px 0 14px;
+      max-width: 480px;
+      font-size: clamp(34px, 4vw, 44px);
+      line-height: 1.08;
+      letter-spacing: -0.02em;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 520px;
+      color: rgba(255,255,255,0.86);
+      font-size: 17px;
+      line-height: 1.75;
+      font-weight: 700;
+    }
+
+    .steps {
+      display: grid;
+      gap: 10px;
+      margin-top: 32px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 12px;
+      align-items: center;
+      min-height: 70px;
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.07);
+    }
+
+    .step-no {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #5de1a6;
+      color: #053526;
+      font-weight: 1000;
+      font-size: 17px;
+    }
+
+    .step b {
+      display: block;
+      margin-bottom: 3px;
+      font-size: 16px;
+    }
+
+    .step span:last-child {
+      color: rgba(255,255,255,0.76);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--card);
+      padding: 26px;
+      box-shadow: 0 24px 55px rgba(20, 35, 58, 0.12);
+    }
+
+    .panel h2 {
+      margin: 0 0 22px;
+      font-size: 30px;
+      line-height: 1;
+      letter-spacing: -0.02em;
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      margin-bottom: 22px;
+      border: 1px solid #cbd8ec;
+      border-radius: 8px;
+      padding: 4px;
+      background: #f6f9fd;
+    }
+
+    .tab {
+      border: 0;
+      min-height: 44px;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .tab.active {
+      background: #fff;
+      color: #1d4ed8;
+      box-shadow: 0 8px 20px rgba(37, 99, 235, 0.12);
+    }
+
+    .mode { display: none; }
+    .mode.active { display: block; }
+
+    .field { margin-bottom: 18px; }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--ink);
+      font-weight: 900;
+      font-size: 15px;
+    }
+
+    input, textarea {
+      width: 100%;
+      border: 1px solid #cfdbea;
+      border-radius: 8px;
+      background: #fbfcff;
+      color: var(--ink);
+      font: inherit;
+      font-size: 16px;
+      outline: none;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    input {
+      height: 52px;
+      padding: 0 14px;
+    }
+
+    textarea {
+      min-height: 140px;
+      resize: vertical;
+      padding: 14px;
+      line-height: 1.65;
+    }
+
+    input:focus, textarea:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
+    }
+
+    .inline {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 52px;
+      border: 0;
+      border-radius: 8px;
+      padding: 0 20px;
+      color: #fff;
+      background: var(--blue);
+      font: inherit;
+      font-size: 16px;
+      font-weight: 900;
+      cursor: pointer;
+      transition: transform 0.18s ease, opacity 0.18s ease;
+      white-space: nowrap;
+    }
+
+    .btn.secondary {
+      border: 1px solid #d1dceb;
+      color: #08234a;
+      background: #edf3fb;
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+    .btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.62;
+      transform: none;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .message {
+      display: none;
+      margin-top: 14px;
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-size: 16px;
+      font-weight: 800;
+      line-height: 1.6;
+    }
+
+    .message.show { display: block; }
+    .message.success {
+      border: 1px solid rgba(16, 185, 129, 0.28);
+      background: var(--green-soft);
+      color: #047857;
+    }
+    .message.error {
+      border: 1px solid rgba(220, 38, 38, 0.24);
+      background: var(--red-soft);
+      color: #b91c1c;
+    }
+    .message.info {
+      border: 1px solid #d8e2f1;
+      background: #f8fbff;
+      color: #475569;
+    }
+
+    .task-card {
+      display: none;
+      margin-top: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcff;
+      padding: 16px;
+    }
+
+    .task-card.show { display: block; }
+
+    .task-row {
+      display: grid;
+      grid-template-columns: 88px 1fr;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid #e8eef7;
+      align-items: center;
+    }
+
+    .task-row:last-child { border-bottom: 0; }
+    .task-row span:first-child { color: var(--muted); }
+    .task-row strong { word-break: break-all; }
+
+    .batch-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .batch-results {
+      display: none;
+      margin-top: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .batch-results.show { display: block; }
+
+    .batch-head, .batch-item {
+      display: grid;
+      grid-template-columns: 80px 1.2fr 1.2fr 110px;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 14px;
+    }
+
+    .batch-head {
+      background: #f4f7fb;
+      color: var(--muted);
+      font-weight: 900;
+    }
+
+    .batch-item {
+      border-top: 1px solid #e8eef7;
+      font-size: 14px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-weight: 900;
+      background: #edf3fb;
+      color: #475569;
+    }
+
+    .status-pill.success { background: var(--green-soft); color: #047857; }
+    .status-pill.error { background: var(--red-soft); color: #b91c1c; }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      .hero { min-height: auto; }
+      .panel { padding: 20px; }
+    }
+
+    @media (max-width: 620px) {
+      .page { width: min(100% - 18px, 1160px); padding-top: 10px; }
+      .hero { padding: 22px; }
+      .inline, .batch-grid { grid-template-columns: 1fr; }
+      .batch-head { display: none; }
+      .batch-item {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="layout">
+      <aside class="hero">
+        <div>
+          <span class="pill">CDK 激活</span>
+          <h1>输入 CDK 和邮箱，接收 Team 邀请</h1>
+          <p>单个激活适合一个客户；批量激活适合一次买了多个 CDK 的客户。提交后请等待任务完成，再去邮箱接受邀请。</p>
+        </div>
+        <div class="steps">
+          <div class="step">
+            <span class="step-no">1</span>
+            <span><b>准备 CDK</b>每个 CDK 只能使用一次。</span>
+          </div>
+          <div class="step">
+            <span class="step-no">2</span>
+            <span><b>填写邮箱</b>邮箱必须是要加入 Team 的 ChatGPT 邮箱。</span>
+          </div>
+          <div class="step">
+            <span class="step-no">3</span>
+            <span><b>等待邀请</b>后台自动选择可用工作区发出邀请。</span>
+          </div>
+        </div>
+      </aside>
+
+      <section class="panel">
+        <h2>激活 CDK</h2>
+        <div class="tabs" role="tablist" aria-label="激活方式">
+          <button class="tab active" type="button" data-mode="single">单个激活</button>
+          <button class="tab" type="button" data-mode="batch">批量激活</button>
+        </div>
+
+        <div class="mode active" id="single-mode">
+          <form id="single-form">
+            <div class="field">
+              <label for="single-cdk">CDK 卡密</label>
+              <div class="inline">
+                <input id="single-cdk" name="cdk" type="text" placeholder="TEAM-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false" required>
+                <button class="btn secondary" id="verify-btn" type="button">验证</button>
+              </div>
+            </div>
+            <div class="field">
+              <label for="single-email">ChatGPT 邮箱</label>
+              <input id="single-email" name="email" type="text" inputmode="email" placeholder="name@example.com" autocomplete="email" autocapitalize="off" autocorrect="off" spellcheck="false" required>
+            </div>
+            <button class="btn" id="submit-btn" type="submit">提交激活</button>
+          </form>
+          <div class="message" id="single-message"></div>
+          <div class="task-card" id="task-card">
+            <div class="task-row"><span>任务号</span><strong id="task-id">-</strong></div>
+            <div class="task-row"><span>邮箱</span><strong id="task-email">-</strong></div>
+            <div class="task-row"><span>状态</span><strong id="task-status">-</strong></div>
+          </div>
+        </div>
+
+        <div class="mode" id="batch-mode">
+          <form id="batch-form">
+            <div class="batch-grid">
+              <div class="field">
+                <label for="batch-cdks">CDK 列表</label>
+                <textarea id="batch-cdks" placeholder="TEAM-XXXX-XXXX-XXXX-XXXX&#10;TEAM-YYYY-YYYY-YYYY-YYYY"></textarea>
+              </div>
+              <div class="field">
+                <label for="batch-emails">邮箱列表</label>
+                <textarea id="batch-emails" placeholder="name1@example.com&#10;name2@example.com"></textarea>
+              </div>
+            </div>
+            <div class="actions">
+              <button class="btn secondary" id="batch-verify-btn" type="button">验证批量 CDK</button>
+              <button class="btn" id="batch-submit-btn" type="submit">批量激活</button>
+            </div>
+          </form>
+          <div class="message" id="batch-message"></div>
+          <div class="batch-results" id="batch-results">
+            <div class="batch-head">
+              <span>序号</span>
+              <span>CDK</span>
+              <span>邮箱</span>
+              <span>状态</span>
+            </div>
+            <div id="batch-list"></div>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const tabs = Array.from(document.querySelectorAll('.tab'));
+    const modes = {
+      single: document.getElementById('single-mode'),
+      batch: document.getElementById('batch-mode'),
+    };
+    const singleCdk = document.getElementById('single-cdk');
+    const singleEmail = document.getElementById('single-email');
+    const verifyBtn = document.getElementById('verify-btn');
+    const submitBtn = document.getElementById('submit-btn');
+    const singleForm = document.getElementById('single-form');
+    const singleMessage = document.getElementById('single-message');
+    const taskCard = document.getElementById('task-card');
+    const taskIdEl = document.getElementById('task-id');
+    const taskEmailEl = document.getElementById('task-email');
+    const taskStatusEl = document.getElementById('task-status');
+    const batchForm = document.getElementById('batch-form');
+    const batchCdks = document.getElementById('batch-cdks');
+    const batchEmails = document.getElementById('batch-emails');
+    const batchVerifyBtn = document.getElementById('batch-verify-btn');
+    const batchSubmitBtn = document.getElementById('batch-submit-btn');
+    const batchMessage = document.getElementById('batch-message');
+    const batchResults = document.getElementById('batch-results');
+    const batchList = document.getElementById('batch-list');
+    const pollTimers = new Map();
+
+    function normalizeCdk(value) {
+      return String(value || '').trim().toUpperCase();
+    }
+
+    function normalizeEmail(value) {
+      return String(value || '').trim().toLowerCase();
+    }
+
+    function setMessage(node, type, text) {
+      node.className = `message show ${type}`;
+      node.textContent = text;
+    }
+
+    function clearMessage(node) {
+      node.className = 'message';
+      node.textContent = '';
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    async function request(url, options = {}) {
+      const res = await fetch(url, {
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+        ...options,
+      });
+      const text = await res.text();
+      let data = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = { msg: text };
+      }
+      if (!res.ok || data.code >= 400) {
+        throw new Error(data.msg || data.error || '请求失败，请稍后重试');
+      }
+      return data;
+    }
+
+    function fillQueryDefaults() {
+      const params = new URLSearchParams(location.search);
+      const cdk = normalizeCdk(params.get('cdk'));
+      const email = normalizeEmail(params.get('email'));
+      if (cdk) singleCdk.value = cdk;
+      if (email) singleEmail.value = email;
+    }
+
+    function switchMode(mode) {
+      tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.mode === mode));
+      Object.entries(modes).forEach(([key, node]) => node.classList.toggle('active', key === mode));
+    }
+
+    async function verifySingle() {
+      const cardCode = normalizeCdk(singleCdk.value);
+      singleCdk.value = cardCode;
+      clearMessage(singleMessage);
+      if (!cardCode) {
+        setMessage(singleMessage, 'error', '请先填写 CDK 卡密');
+        singleCdk.focus();
+        return false;
+      }
+      verifyBtn.disabled = true;
+      verifyBtn.textContent = '验证中...';
+      try {
+        const data = await request('/api/cdk/verify', {
+          method: 'POST',
+          body: JSON.stringify({ cardCode }),
+        });
+        const inventory = data.activationStockCount ?? data.stockCount;
+        const suffix = Number.isFinite(Number(inventory)) ? `，当前可激活库存 ${inventory} 个` : '';
+        setMessage(singleMessage, 'success', `CDK 可用${suffix}`);
+        return true;
+      } catch (err) {
+        setMessage(singleMessage, 'error', err.message || 'CDK 验证失败');
+        return false;
+      } finally {
+        verifyBtn.disabled = false;
+        verifyBtn.textContent = '验证';
+      }
+    }
+
+    function updateTaskCard(taskId, email, statusText) {
+      taskCard.classList.add('show');
+      taskIdEl.textContent = taskId || '-';
+      taskEmailEl.textContent = email || '-';
+      taskStatusEl.textContent = statusText || '-';
+    }
+
+    function taskStatusText(status, statusMessage) {
+      if (status === 'SUCCESS') return 'Team 邀请已发送，请查看邮箱并接受邀请';
+      if (status === 'FAILED') return statusMessage || 'Team 邀请失败，请联系客服处理';
+      return statusMessage || '正在发送 Team 邀请... 如果没反应，10分钟后 CDK 重置请重试';
+    }
+
+    async function pollSingleTask(taskId, token, email) {
+      const qs = token ? `?token=${encodeURIComponent(token)}` : '';
+      const data = await request(`/api/cdk/query/${encodeURIComponent(taskId)}${qs}`);
+      const statusText = taskStatusText(data.taskStatus, data.statusMessage || data.errorMessage);
+      updateTaskCard(taskId, email, statusText);
+      if (data.taskStatus === 'SUCCESS') {
+        setMessage(singleMessage, 'success', statusText);
+        return true;
+      }
+      if (data.taskStatus === 'FAILED') {
+        setMessage(singleMessage, 'error', data.errorMessage || statusText);
+        return true;
+      }
+      setMessage(singleMessage, 'info', statusText);
+      return false;
+    }
+
+    async function submitSingle(event) {
+      event.preventDefault();
+      const cardCode = normalizeCdk(singleCdk.value);
+      const email = normalizeEmail(singleEmail.value);
+      singleCdk.value = cardCode;
+      singleEmail.value = email;
+      clearMessage(singleMessage);
+
+      if (!cardCode) {
+        setMessage(singleMessage, 'error', '请填写 CDK 卡密');
+        singleCdk.focus();
+        return;
+      }
+      if (!email) {
+        setMessage(singleMessage, 'error', '请填写 ChatGPT 邮箱');
+        singleEmail.focus();
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = '提交中...';
+      try {
+        const data = await request('/api/cdk/submit-team', {
+          method: 'POST',
+          body: JSON.stringify({ cardCode, email }),
+        });
+        const taskId = data.data || data.taskId;
+        const token = data.taskToken || '';
+        updateTaskCard(taskId, email, '正在发送 Team 邀请... 如果没反应，10分钟后 CDK 重置请重试');
+        setMessage(singleMessage, 'info', '已提交激活，正在处理... 如果没反应，10分钟后 CDK 重置请重试');
+        let attempts = 0;
+        const poll = async () => {
+          attempts += 1;
+          try {
+            const done = await pollSingleTask(taskId, token, email);
+            if (done || attempts >= 60) {
+              clearInterval(pollTimers.get(taskId));
+              pollTimers.delete(taskId);
+            }
+            return done || attempts >= 60;
+          } catch (err) {
+            setMessage(singleMessage, 'error', err.message || '查询任务失败，请稍后刷新重试');
+            clearInterval(pollTimers.get(taskId));
+            pollTimers.delete(taskId);
+            return true;
+          }
+        };
+        const doneImmediately = await poll();
+        if (!doneImmediately && !pollTimers.has(taskId)) {
+          pollTimers.set(taskId, setInterval(poll, 3000));
+        }
+      } catch (err) {
+        setMessage(singleMessage, 'error', err.message || '提交失败，请稍后重试');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '提交激活';
+      }
+    }
+
+    function parseLines(value) {
+      return String(value || '')
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean);
+    }
+
+    function getBatchItems() {
+      const cdks = parseLines(batchCdks.value).map(normalizeCdk);
+      const emails = parseLines(batchEmails.value).map(normalizeEmail);
+      const max = Math.max(cdks.length, emails.length);
+      const items = [];
+      for (let i = 0; i < max; i += 1) {
+        items.push({ lineNumber: i + 1, cardCode: cdks[i] || '', email: emails[i] || '' });
+      }
+      return items;
+    }
+
+    function renderBatchRows(rows) {
+      batchResults.classList.add('show');
+      batchList.innerHTML = rows.map(row => `
+        <div class="batch-item" data-task-id="${escapeHtml(row.taskId || '')}">
+          <strong>第 ${row.lineNumber} 条</strong>
+          <span>${escapeHtml(row.cardCode || '-')}</span>
+          <span>${escapeHtml(row.email || '-')}</span>
+          <span class="status-pill ${row.type || ''}">${escapeHtml(row.status || '-')}</span>
+        </div>
+      `).join('');
+    }
+
+    async function verifyBatch() {
+      clearMessage(batchMessage);
+      const items = getBatchItems();
+      if (!items.length || items.every(item => !item.cardCode && !item.email)) {
+        setMessage(batchMessage, 'error', '请填写 CDK 和邮箱列表');
+        return;
+      }
+      const invalid = items.filter(item => !item.cardCode || !item.email);
+      if (invalid.length) {
+        setMessage(batchMessage, 'error', `第 ${invalid.map(item => item.lineNumber).join(', ')} 行没有成对的 CDK 和邮箱`);
+        return;
+      }
+      batchVerifyBtn.disabled = true;
+      batchVerifyBtn.textContent = '验证中...';
+      const rows = [];
+      for (const item of items) {
+        try {
+          await request('/api/cdk/verify', {
+            method: 'POST',
+            body: JSON.stringify({ cardCode: item.cardCode }),
+          });
+          rows.push({ ...item, status: '可用', type: 'success' });
+        } catch (err) {
+          rows.push({ ...item, status: err.message || '失败', type: 'error' });
+        }
+      }
+      renderBatchRows(rows);
+      const failed = rows.filter(row => row.type === 'error').length;
+      setMessage(batchMessage, failed ? 'error' : 'success', `已验证 ${rows.length} 条 CDK，失败 ${failed} 条`);
+      batchVerifyBtn.disabled = false;
+      batchVerifyBtn.textContent = '验证批量 CDK';
+    }
+
+    async function submitBatch(event) {
+      event.preventDefault();
+      clearMessage(batchMessage);
+      const items = getBatchItems();
+      if (!items.length || items.every(item => !item.cardCode && !item.email)) {
+        setMessage(batchMessage, 'error', '请填写 CDK 和邮箱列表');
+        return;
+      }
+      const invalid = items.filter(item => !item.cardCode || !item.email);
+      if (invalid.length) {
+        setMessage(batchMessage, 'error', `第 ${invalid.map(item => item.lineNumber).join(', ')} 行没有成对的 CDK 和邮箱`);
+        return;
+      }
+      batchSubmitBtn.disabled = true;
+      batchSubmitBtn.textContent = '提交中...';
+      try {
+        const data = await request('/api/cdk/submit-team-batch', {
+          method: 'POST',
+          body: JSON.stringify({ items }),
+        });
+        const rows = [
+          ...(data.tasks || []).map(item => ({ ...item, status: '处理中', type: '' })),
+          ...(data.errors || []).map(item => ({ ...item, status: item.message || '失败', type: 'error' })),
+        ].sort((a, b) => a.lineNumber - b.lineNumber);
+        renderBatchRows(rows);
+        setMessage(batchMessage, 'info', `已提交 ${data.successCount || 0} 条任务，失败 ${data.failCount || 0} 条，正在处理... 如果没反应，10分钟后 CDK 重置请重试`);
+        pollBatchRows(data.tasks || []);
+      } catch (err) {
+        setMessage(batchMessage, 'error', err.message || '批量提交失败，请稍后重试');
+      } finally {
+        batchSubmitBtn.disabled = false;
+        batchSubmitBtn.textContent = '批量激活';
+      }
+    }
+
+    function updateBatchRow(taskId, status, type) {
+      const row = batchList.querySelector(`[data-task-id="${CSS.escape(taskId)}"]`);
+      if (!row) return;
+      const pill = row.querySelector('.status-pill');
+      pill.className = `status-pill ${type || ''}`;
+      pill.textContent = status;
+    }
+
+    function pollBatchRows(tasks) {
+      tasks.forEach(task => {
+        let attempts = 0;
+        const poll = async () => {
+          attempts += 1;
+          try {
+            const qs = task.taskToken ? `?token=${encodeURIComponent(task.taskToken)}` : '';
+            const data = await request(`/api/cdk/query/${encodeURIComponent(task.taskId)}${qs}`);
+            if (data.taskStatus === 'SUCCESS') {
+              updateBatchRow(task.taskId, '成功', 'success');
+              clearInterval(pollTimers.get(task.taskId));
+              pollTimers.delete(task.taskId);
+              return true;
+            } else if (data.taskStatus === 'FAILED') {
+              updateBatchRow(task.taskId, '失败', 'error');
+              clearInterval(pollTimers.get(task.taskId));
+              pollTimers.delete(task.taskId);
+              return true;
+            } else if (attempts >= 60) {
+              updateBatchRow(task.taskId, '处理中', '');
+              clearInterval(pollTimers.get(task.taskId));
+              pollTimers.delete(task.taskId);
+              return true;
+            } else {
+              updateBatchRow(task.taskId, '处理中', '');
+            }
+            return false;
+          } catch {
+            updateBatchRow(task.taskId, '查询失败', 'error');
+            clearInterval(pollTimers.get(task.taskId));
+            pollTimers.delete(task.taskId);
+            return true;
+          }
+        };
+        poll().then(doneImmediately => {
+          if (!doneImmediately && !pollTimers.has(task.taskId)) {
+            pollTimers.set(task.taskId, setInterval(poll, 3000));
+          }
+        });
+      });
+    }
+
+    tabs.forEach(tab => tab.addEventListener('click', () => switchMode(tab.dataset.mode)));
+    verifyBtn.addEventListener('click', verifySingle);
+    singleForm.addEventListener('submit', submitSingle);
+    batchVerifyBtn.addEventListener('click', verifyBatch);
+    batchForm.addEventListener('submit', submitBatch);
+    fillQueryDefaults();
+  </script>
+</body>
+</html>
