@@ -8,7 +8,7 @@ const {
   PRODUCT_TYPE: TEAM_PRODUCT_TYPE,
   getTeamActivationAvailability,
 } = require('../services/team-stock');
-const { ensureInventoryFreshness, refreshInventoryInBackground } = require('../services/inventory-sync');
+const { refreshInventoryInBackground } = require('../services/inventory-sync');
 const { releaseStaleProcessingCdks } = require('../services/cdk-processing-timeout');
 
 const router = express.Router();
@@ -537,6 +537,7 @@ router.post('/submit', (req, res) => {
  */
 router.post('/submit-team', async (req, res) => {
   releaseStaleProcessingCdks();
+  refreshInventoryInBackground();
 
   const cardCode = (req.body.cardCode || '').trim().toUpperCase();
   const email = normalizeEmail(req.body.email);
@@ -549,14 +550,7 @@ router.post('/submit-team', async (req, res) => {
   }
 
   try {
-    await ensureInventoryFreshness().catch(err => {
-      console.error('[CDK] Inventory refresh before team submit failed:', err.message);
-    });
-
     const created = createTeamInviteTask(cardCode, email);
-    cdkTeamWorker.processTask(created.taskId).catch(err => {
-      console.error('[CDK Route] Team background task error:', err.message);
-    });
 
     return res.json({
       code: 200,
@@ -573,9 +567,7 @@ router.post('/submit-team', async (req, res) => {
  * GET /api/cdk/query/:taskId — Query task status
  */
 router.post('/submit-team-batch', async (req, res) => {
-  await ensureInventoryFreshness().catch(err => {
-    console.error('[CDK] Inventory refresh before team batch submit failed:', err.message);
-  });
+  refreshInventoryInBackground();
 
   const items = Array.isArray(req.body.items) ? req.body.items : [];
   if (!items.length) {
