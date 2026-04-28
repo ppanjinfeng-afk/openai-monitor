@@ -14,6 +14,13 @@ const PUBLIC_HOSTS = new Set(
     .map(host => host.trim().toLowerCase())
     .filter(Boolean)
 );
+const ACTIVATION_ONLY_PUBLIC_HOSTS = new Set(
+  (process.env.ACTIVATION_ONLY_PUBLIC_HOSTS || 'panqda.com,www.panqda.com')
+    .split(',')
+    .map(host => host.trim().toLowerCase())
+    .filter(Boolean)
+);
+const ALL_PUBLIC_HOSTS = new Set([...PUBLIC_HOSTS, ...ACTIVATION_ONLY_PUBLIC_HOSTS]);
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const LOOPBACK_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const publicRateBuckets = new Map();
@@ -26,7 +33,12 @@ const getSettingValueStmt = db.prepare('SELECT value FROM settings WHERE key = ?
 
 function isPublicHost(req) {
   const hostname = String(req.hostname || '').toLowerCase();
-  return PUBLIC_HOSTS.has(hostname);
+  return ALL_PUBLIC_HOSTS.has(hostname);
+}
+
+function isActivationOnlyPublicHost(req) {
+  const hostname = String(req.hostname || '').toLowerCase();
+  return ACTIVATION_ONLY_PUBLIC_HOSTS.has(hostname);
 }
 
 function isAllowedCorsOrigin(origin) {
@@ -36,7 +48,7 @@ function isAllowedCorsOrigin(origin) {
 
   try {
     const hostname = new URL(origin).hostname.toLowerCase();
-    return PUBLIC_HOSTS.has(hostname) || LOCAL_HOSTS.has(hostname);
+    return ALL_PUBLIC_HOSTS.has(hostname) || LOCAL_HOSTS.has(hostname);
   } catch {
     return false;
   }
@@ -487,7 +499,46 @@ function enforcePublicRateLimit(req, res, next) {
   return next();
 }
 
+function isAllowedActivationOnlyPublicRequest(req) {
+  const pathOnly = req.path;
+  const isReadMethod = req.method === 'GET' || req.method === 'HEAD';
+
+  if (isReadMethod && ['/', '/join', '/join.html', '/favicon.ico'].includes(pathOnly)) {
+    return true;
+  }
+
+  if (isReadMethod && pathOnly.startsWith('/assets/')) {
+    return true;
+  }
+
+  if (isReadMethod && pathOnly === '/api/payments/product') {
+    return true;
+  }
+
+  if (req.method === 'POST' && pathOnly === '/api/cdk/verify') {
+    return true;
+  }
+
+  if (req.method === 'POST' && pathOnly === '/api/cdk/submit-team') {
+    return true;
+  }
+
+  if (req.method === 'POST' && pathOnly === '/api/cdk/submit-team-batch') {
+    return true;
+  }
+
+  if (isReadMethod && /^\/api\/cdk\/query\/[^/]+$/.test(pathOnly)) {
+    return true;
+  }
+
+  return false;
+}
+
 function isAllowedPublicRequest(req) {
+  if (req.isActivationOnlyPublicHost) {
+    return isAllowedActivationOnlyPublicRequest(req);
+  }
+
   const pathOnly = req.path;
   const isReadMethod = req.method === 'GET' || req.method === 'HEAD';
 
@@ -564,6 +615,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: false }));
 app.use((req, res, next) => {
   req.isPublicHost = isPublicHost(req) && isLoopbackRequest(req);
+  req.isActivationOnlyPublicHost = isActivationOnlyPublicHost(req) && isLoopbackRequest(req);
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'same-origin');
@@ -578,6 +630,10 @@ app.use((req, res, next) => {
 
   if (!isPublicTunnelEnabled()) {
     return sendPublicMaintenance(req, res);
+  }
+
+  if (req.isActivationOnlyPublicHost && (req.path === '/' || req.path === '/buy' || req.path === '/buy.html')) {
+    return res.redirect(302, '/join');
   }
 
   if (req.path === '/') {
