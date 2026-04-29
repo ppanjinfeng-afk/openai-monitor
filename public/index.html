@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=20260429-stale-kick">
+  <link rel="stylesheet" href="/css/style.css?v=20260430-system-monitor">
 </head>
 <body>
   <div id="app">
@@ -67,6 +67,10 @@
         <a href="#" class="nav-item" data-page="untracked-members" id="nav-untracked-members">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
           <span>没有记录来源</span>
+        </a>
+        <a href="#" class="nav-item" data-page="system-monitor" id="nav-system-monitor">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l2-7 4 14 2-7h6"/><path d="M4 19h16"/></svg>
+          <span>VPS 监控</span>
         </a>
         <a href="#" class="nav-item" data-page="settings" id="nav-settings">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -1312,6 +1316,100 @@
           </div>
         </div>
 
+        <!-- VPS Monitor Page -->
+        <div class="page hidden" id="page-system-monitor">
+          <div class="page-section-head page-section-head-inline">
+            <div>
+              <span class="page-section-kicker">VPS Realtime Monitor</span>
+              <h2 class="page-section-title">VPS 监控</h2>
+              <p class="page-section-text">实时查看服务器 CPU、内存、负载和后台进程占用，方便判断邀请、同步、踢人是否把机器跑满。</p>
+            </div>
+          </div>
+
+          <div class="system-monitor-grid">
+            <div class="system-monitor-main">
+              <div class="system-monitor-card-grid">
+                <div class="system-monitor-card">
+                  <span class="system-monitor-label">CPU 使用率</span>
+                  <strong class="system-monitor-value" id="system-cpu-usage">--%</strong>
+                  <span class="system-monitor-meta" id="system-cpu-meta">等待数据...</span>
+                </div>
+                <div class="system-monitor-card">
+                  <span class="system-monitor-label">内存使用率</span>
+                  <strong class="system-monitor-value" id="system-memory-usage">--%</strong>
+                  <span class="system-monitor-meta" id="system-memory-meta">等待数据...</span>
+                </div>
+                <div class="system-monitor-card">
+                  <span class="system-monitor-label">系统负载</span>
+                  <strong class="system-monitor-value" id="system-loadavg">--</strong>
+                  <span class="system-monitor-meta">1 / 5 / 15 分钟</span>
+                </div>
+                <div class="system-monitor-card">
+                  <span class="system-monitor-label">后台进程内存</span>
+                  <strong class="system-monitor-value" id="system-process-memory">--</strong>
+                  <span class="system-monitor-meta" id="system-process-meta">等待数据...</span>
+                </div>
+              </div>
+
+              <div class="panel section-spacer-top">
+                <div class="panel-header dashboard-panel-header">
+                  <div>
+                    <h2>CPU 实时曲线</h2>
+                    <p>每 2 秒刷新一次，保留最近 2 分钟左右的数据。</p>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <canvas class="system-chart" id="system-cpu-chart" height="220"></canvas>
+                </div>
+              </div>
+
+              <div class="panel section-spacer-top">
+                <div class="panel-header dashboard-panel-header">
+                  <div>
+                    <h2>内存实时曲线</h2>
+                    <p>用于观察同步、邀请、踢人任务是否造成持续升高。</p>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <canvas class="system-chart" id="system-memory-chart" height="220"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <aside class="system-monitor-side">
+              <div class="panel">
+                <div class="panel-header">
+                  <h2>运行详情</h2>
+                </div>
+                <div class="panel-body">
+                  <div class="system-detail-list">
+                    <div><span>CPU 核心</span><strong id="system-cpu-cores">--</strong></div>
+                    <div><span>CPU 型号</span><strong id="system-cpu-model">--</strong></div>
+                    <div><span>总内存</span><strong id="system-memory-total">--</strong></div>
+                    <div><span>系统运行</span><strong id="system-uptime">--</strong></div>
+                    <div><span>服务进程</span><strong id="system-process-pid">--</strong></div>
+                    <div><span>服务运行</span><strong id="system-process-uptime">--</strong></div>
+                    <div><span>最后刷新</span><strong id="system-last-updated">--</strong></div>
+                  </div>
+                </div>
+              </div>
+              <div class="panel section-spacer-top">
+                <div class="panel-header">
+                  <h2>判断建议</h2>
+                </div>
+                <div class="panel-body">
+                  <div class="dashboard-alert-item accent">
+                    <div class="dashboard-alert-detail">CPU 长时间高于 85% 或内存长时间高于 85%，建议降低邀请/浏览器并发，避免 504 和请求超时。</div>
+                  </div>
+                  <div class="dashboard-alert-item warning section-spacer-top">
+                    <div class="dashboard-alert-detail">如果后台刚重启，CPU 第一条数据可能为 0，等待下一次刷新即可。</div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+
         <!-- Settings Page -->
         <div class="page hidden" id="page-settings">
           <div class="page-section-head page-section-head-inline">
@@ -1433,9 +1531,9 @@
   <!-- Toast Container -->
   <div class="toast-container" id="toast-container"></div>
 
-  <script src="/js/api.js?v=20260429-stale-kick"></script>
+  <script src="/js/api.js?v=20260430-system-monitor"></script>
   <script src="/js/components.js?v=20260429-member-age"></script>
-  <script src="/js/app.js?v=20260429-stale-kick"></script>
+  <script src="/js/app.js?v=20260430-system-monitor"></script>
 </body>
 </html>
 

@@ -725,6 +725,7 @@ app.use(express.static(publicDir, {
 app.use('/api/accounts', require('./routes/accounts'));
 app.use('/api/checks', require('./routes/checks'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/system', require('./routes/system'));
 app.use('/api/invites', require('./routes/invites'));
 app.use('/api/members', require('./routes/members'));
 app.use('/api/workspaces', require('./routes/workspaces'));

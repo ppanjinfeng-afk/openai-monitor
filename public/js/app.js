@@ -57,6 +57,9 @@ const App = {
   cdkTasksData: { tasks: [] },
   cdkOrdersData: { orders: [], summary: {} },
   cdkTraceData: null,
+  systemMetricsHistory: { cpu: [], memory: [] },
+  systemMetricsTimer: null,
+  systemMetricsMaxPoints: 60,
 
   // ===== Init =====
   async init() {
@@ -292,6 +295,9 @@ const App = {
       case 'cdk-manage':
         await this.loadCdkPage();
         break;
+      case 'system-monitor':
+        await this.loadSystemMetrics(options);
+        break;
       case 'logs':
         await this.loadLogs();
         break;
@@ -412,6 +418,7 @@ const App = {
     'member-cleanup': '成员清理',
     'untracked-members': '没有记录来源',
     'checkout-tools': '结账工具',
+    'system-monitor': 'VPS 监控',
     settings: '设置',
   },
 
@@ -437,6 +444,8 @@ const App = {
       const showCheckButton = ['dashboard', 'accounts'].includes(page);
       btnCheckAll.style.display = showCheckButton ? '' : 'none';
     }
+
+    this.updateSystemMonitorPolling(page);
 
     // Load page data
     this.loadPageData(page);
@@ -4135,6 +4144,209 @@ const App = {
       this.renderCdkTrace();
       this.toast(`追踪失败: ${err.message}`, 'error');
     }
+  },
+
+  // ===== VPS Monitor =====
+  updateSystemMonitorPolling(page) {
+    if (page === 'system-monitor') {
+      this.startSystemMonitorPolling();
+      return;
+    }
+
+    this.stopSystemMonitorPolling();
+  },
+
+  startSystemMonitorPolling() {
+    if (this.systemMetricsTimer) {
+      return;
+    }
+
+    this.systemMetricsTimer = setInterval(() => {
+      if (this.currentPage !== 'system-monitor') {
+        this.stopSystemMonitorPolling();
+        return;
+      }
+
+      this.loadSystemMetrics({ silent: true }).catch(err => {
+        console.error('System metrics refresh failed:', err);
+      });
+    }, 2000);
+  },
+
+  stopSystemMonitorPolling() {
+    if (!this.systemMetricsTimer) {
+      return;
+    }
+
+    clearInterval(this.systemMetricsTimer);
+    this.systemMetricsTimer = null;
+  },
+
+  formatBytes(bytes = 0) {
+    const value = Number(bytes || 0);
+    if (!Number.isFinite(value) || value <= 0) {
+      return '0 B';
+    }
+
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const index = Math.min(units.length - 1, Math.floor(Math.log(value) / Math.log(1024)));
+    const normalized = value / (1024 ** index);
+    return `${normalized >= 10 || index === 0 ? normalized.toFixed(0) : normalized.toFixed(1)} ${units[index]}`;
+  },
+
+  formatDuration(seconds = 0) {
+    const total = Math.max(0, Math.floor(Number(seconds || 0)));
+    const days = Math.floor(total / 86400);
+    const hours = Math.floor((total % 86400) / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+
+    if (days > 0) {
+      return `${days}天 ${hours}小时`;
+    }
+    if (hours > 0) {
+      return `${hours}小时 ${minutes}分钟`;
+    }
+    return `${minutes}分钟`;
+  },
+
+  pushSystemMetric(metric) {
+    const cpu = Number(metric?.cpu?.usage_percent || 0);
+    const memory = Number(metric?.memory?.usage_percent || 0);
+    this.systemMetricsHistory.cpu.push(cpu);
+    this.systemMetricsHistory.memory.push(memory);
+
+    while (this.systemMetricsHistory.cpu.length > this.systemMetricsMaxPoints) {
+      this.systemMetricsHistory.cpu.shift();
+    }
+    while (this.systemMetricsHistory.memory.length > this.systemMetricsMaxPoints) {
+      this.systemMetricsHistory.memory.shift();
+    }
+  },
+
+  drawSystemChart(canvasId, values = [], options = {}) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) {
+      return;
+    }
+
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const width = Math.max(320, canvas.clientWidth || canvas.parentElement?.clientWidth || 640);
+    const height = Number(canvas.getAttribute('height')) || 220;
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+
+    const padding = { top: 18, right: 16, bottom: 26, left: 38 };
+    const chartWidth = width - padding.left - padding.right;
+    const chartHeight = height - padding.top - padding.bottom;
+    const lineColor = options.lineColor || '#5fd6c1';
+    const fillColor = options.fillColor || 'rgba(95, 214, 193, 0.16)';
+    const gridColor = 'rgba(126, 173, 169, 0.12)';
+    const textColor = 'rgba(199, 218, 216, 0.78)';
+
+    ctx.strokeStyle = gridColor;
+    ctx.lineWidth = 1;
+    ctx.font = '12px Sora, sans-serif';
+    ctx.fillStyle = textColor;
+
+    [0, 25, 50, 75, 100].forEach(mark => {
+      const y = padding.top + chartHeight - (mark / 100) * chartHeight;
+      ctx.beginPath();
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(width - padding.right, y);
+      ctx.stroke();
+      ctx.fillText(`${mark}%`, 6, y + 4);
+    });
+
+    if (!values.length) {
+      ctx.fillText('等待数据...', padding.left + 10, padding.top + chartHeight / 2);
+      return;
+    }
+
+    const step = values.length > 1 ? chartWidth / (values.length - 1) : chartWidth;
+    const points = values.map((value, index) => ({
+      x: padding.left + step * index,
+      y: padding.top + chartHeight - (Math.max(0, Math.min(100, value)) / 100) * chartHeight,
+    }));
+
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      if (index === 0) {
+        ctx.moveTo(point.x, point.y);
+      } else {
+        ctx.lineTo(point.x, point.y);
+      }
+    });
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = lineColor;
+    ctx.stroke();
+
+    ctx.lineTo(points[points.length - 1].x, padding.top + chartHeight);
+    ctx.lineTo(points[0].x, padding.top + chartHeight);
+    ctx.closePath();
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+
+    const latest = values[values.length - 1];
+    const latestPoint = points[points.length - 1];
+    ctx.beginPath();
+    ctx.arc(latestPoint.x, latestPoint.y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = lineColor;
+    ctx.fill();
+    ctx.fillStyle = textColor;
+    ctx.fillText(`当前 ${Number(latest || 0).toFixed(1)}%`, padding.left, height - 8);
+  },
+
+  renderSystemMetrics(metric) {
+    if (!metric) {
+      return;
+    }
+
+    const cpuUsage = Number(metric.cpu?.usage_percent || 0);
+    const memoryUsage = Number(metric.memory?.usage_percent || 0);
+    const loadavg = Array.isArray(metric.loadavg) ? metric.loadavg : [];
+
+    this.setText('system-cpu-usage', `${cpuUsage.toFixed(1)}%`);
+    this.setText('system-cpu-meta', `${metric.cpu?.cores || 0} 核 · ${loadavg[0] ?? '--'} 当前负载`);
+    this.setText('system-memory-usage', `${memoryUsage.toFixed(1)}%`);
+    this.setText('system-memory-meta', `${this.formatBytes(metric.memory?.used)} / ${this.formatBytes(metric.memory?.total)}`);
+    this.setText('system-loadavg', loadavg.map(value => Number(value || 0).toFixed(2)).join(' / ') || '--');
+    this.setText('system-process-memory', this.formatBytes(metric.process?.memory_rss));
+    this.setText('system-process-meta', `Heap ${this.formatBytes(metric.process?.memory_heap_used)} / ${this.formatBytes(metric.process?.memory_heap_total)}`);
+    this.setText('system-cpu-cores', `${metric.cpu?.cores || 0} 核`);
+    this.setText('system-cpu-model', metric.cpu?.model || '--');
+    this.setText('system-memory-total', this.formatBytes(metric.memory?.total));
+    this.setText('system-uptime', this.formatDuration(metric.uptime_seconds));
+    this.setText('system-process-pid', metric.process?.pid ? `PID ${metric.process.pid}` : '--');
+    this.setText('system-process-uptime', this.formatDuration(metric.process?.uptime_seconds));
+    this.setText('system-last-updated', metric.timestamp ? new Date(metric.timestamp).toLocaleTimeString('zh-CN', { hour12: false }) : '--');
+
+    this.drawSystemChart('system-cpu-chart', this.systemMetricsHistory.cpu, {
+      lineColor: '#58c7ff',
+      fillColor: 'rgba(88, 199, 255, 0.16)',
+    });
+    this.drawSystemChart('system-memory-chart', this.systemMetricsHistory.memory, {
+      lineColor: '#8ff5e1',
+      fillColor: 'rgba(143, 245, 225, 0.16)',
+    });
+  },
+
+  async loadSystemMetrics(options = {}) {
+    return this.runSingleFlight('system-metrics', async () => {
+      try {
+        const metric = await API.getSystemMetrics();
+        this.pushSystemMetric(metric);
+        this.renderSystemMetrics(metric);
+      } catch (err) {
+        this.setText('system-cpu-meta', `读取失败: ${err.message}`);
+        if (!options.silent) {
+          this.toast(`读取 VPS 监控失败: ${err.message}`, 'error');
+        }
+        throw err;
+      }
+    });
   },
 
   // ===== Toast =====

@@ -40,6 +40,10 @@ const API = {
     return this.request('/api/accounts/stats');
   },
 
+  getSystemMetrics() {
+    return this.request('/api/system/metrics');
+  },
+
   getInvalidAccounts() {
     return this.request('/api/accounts/invalid-credentials');
   },
