@@ -150,6 +150,7 @@ const ACCOUNT_INVITE_HEALTH_SELECT_SQL = `
   ${INVITE_HEALTH_LABEL_SQL} AS invite_health_label
 `;
 const inviteWorkspaceReservations = new Map();
+const inviteEmailWorkspaceReservations = new Map();
 const postInviteSyncQueue = [];
 const postInviteSyncByAccountId = new Map();
 let postInviteSyncRunning = false;
@@ -168,6 +169,22 @@ function normalizeWorkspaceId(workspaceId) {
 
 function normalizeWorkspaceName(workspaceName) {
   return String(workspaceName || '').trim();
+}
+
+function getEmailWorkspaceReservationKey(email) {
+  return normalizeEmail(email).toLowerCase();
+}
+
+function parseJsonSafely(value) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
 }
 
 function isWorkspaceInviteLocked(workspaceId, accountId = 0) {
@@ -524,7 +541,65 @@ function getWorkspaceReservationCount(workspaceId) {
   return Number(inviteWorkspaceReservations.get(normalizedWorkspaceId) || 0);
 }
 
-function reserveWorkspaceSlot(workspaceId) {
+function getEmailReservedWorkspaceIds(email) {
+  const key = getEmailWorkspaceReservationKey(email);
+  const reservations = key ? inviteEmailWorkspaceReservations.get(key) : null;
+  if (!reservations) {
+    return [];
+  }
+
+  return [...reservations.keys()].filter(Boolean);
+}
+
+function isWorkspaceReservedForEmail(email, workspaceId) {
+  const key = getEmailWorkspaceReservationKey(email);
+  const normalizedWorkspaceId = normalizeWorkspaceId(workspaceId);
+  if (!key || !normalizedWorkspaceId) {
+    return false;
+  }
+
+  return Number(inviteEmailWorkspaceReservations.get(key)?.get(normalizedWorkspaceId) || 0) > 0;
+}
+
+function reserveEmailWorkspace(email, workspaceId) {
+  const key = getEmailWorkspaceReservationKey(email);
+  const normalizedWorkspaceId = normalizeWorkspaceId(workspaceId);
+  if (!key || !normalizedWorkspaceId) {
+    return null;
+  }
+
+  const reservations = inviteEmailWorkspaceReservations.get(key) || new Map();
+  reservations.set(normalizedWorkspaceId, Number(reservations.get(normalizedWorkspaceId) || 0) + 1);
+  inviteEmailWorkspaceReservations.set(key, reservations);
+
+  return { emailKey: key, workspaceId: normalizedWorkspaceId };
+}
+
+function releaseEmailWorkspace(reservation) {
+  const key = String(reservation?.emailKey || '').trim();
+  const normalizedWorkspaceId = normalizeWorkspaceId(reservation?.workspaceId);
+  if (!key || !normalizedWorkspaceId) {
+    return;
+  }
+
+  const reservations = inviteEmailWorkspaceReservations.get(key);
+  if (!reservations) {
+    return;
+  }
+
+  const currentCount = Number(reservations.get(normalizedWorkspaceId) || 0);
+  if (currentCount <= 1) {
+    reservations.delete(normalizedWorkspaceId);
+  } else {
+    reservations.set(normalizedWorkspaceId, currentCount - 1);
+  }
+
+  if (reservations.size === 0) {
+    inviteEmailWorkspaceReservations.delete(key);
+  }
+}
+
+function reserveWorkspaceSlot(workspaceId, email = '') {
   const normalizedWorkspaceId = normalizeWorkspaceId(workspaceId);
   if (!normalizedWorkspaceId) {
     return null;
@@ -535,7 +610,10 @@ function reserveWorkspaceSlot(workspaceId) {
     getWorkspaceReservationCount(normalizedWorkspaceId) + 1
   );
 
-  return { workspaceId: normalizedWorkspaceId };
+  return {
+    workspaceId: normalizedWorkspaceId,
+    emailWorkspaceReservation: reserveEmailWorkspace(email, normalizedWorkspaceId),
+  };
 }
 
 function releaseWorkspaceSlot(reservation) {
@@ -543,6 +621,8 @@ function releaseWorkspaceSlot(reservation) {
   if (!normalizedWorkspaceId) {
     return;
   }
+
+  releaseEmailWorkspace(reservation.emailWorkspaceReservation);
 
   const currentCount = getWorkspaceReservationCount(normalizedWorkspaceId);
   if (currentCount <= 1) {
@@ -622,7 +702,7 @@ function getInviteHistoryByEmail(email) {
     return [];
   }
 
-  return db.prepare(`
+  const inviteRows = db.prepare(`
     SELECT
       account_id,
       requested_account_id,
@@ -637,6 +717,39 @@ function getInviteHistoryByEmail(email) {
       AND COALESCE(status, '') IN ('sent', 'pending', 'accepted')
     ORDER BY datetime(updated_at) DESC, id DESC
   `).all(targetEmail);
+
+  const taskRows = db.prepare(`
+    SELECT
+      id,
+      invite_result_json,
+      updated_at
+    FROM cdk_tasks
+    WHERE LOWER(account_email) = LOWER(?)
+      AND task_type = 'team_invite'
+      AND status = 'SUCCESS'
+      AND COALESCE(invite_result_json, '') != ''
+    ORDER BY datetime(updated_at) DESC
+  `).all(targetEmail)
+    .map(row => {
+      const result = parseJsonSafely(row.invite_result_json);
+      const workspaceId = normalizeWorkspaceId(result?.workspace_id || result?.workspaceId);
+      if (!workspaceId) {
+        return null;
+      }
+
+      return {
+        account_id: Number(result?.used_account_id || result?.account_id || 0),
+        requested_account_id: Number(result?.requested_account_id || 0),
+        workspace_id: workspaceId,
+        workspace_name: normalizeWorkspaceName(result?.workspace_name || result?.workspaceName),
+        status: 'sent',
+        remote_state: '',
+        failure_category: '',
+      };
+    })
+    .filter(Boolean);
+
+  return [...inviteRows, ...taskRows];
 }
 
 function getHistoricalWorkspaceMemberships(email) {
@@ -1581,7 +1694,11 @@ async function sendInviteWithWorkspaceCandidates(targetEmail, workspaceCandidate
       continue;
     }
 
-    const reservation = reserveWorkspaceSlot(candidate.workspaceId);
+    if (isWorkspaceReservedForEmail(targetEmail, candidate.workspaceId)) {
+      continue;
+    }
+
+    const reservation = reserveWorkspaceSlot(candidate.workspaceId, targetEmail);
     const result = await inviter.sendTeamInvite(candidate.account, targetEmail, {
       forceResend: Boolean(options.forceResend),
       workspaceId: candidate.workspaceId,
@@ -2134,9 +2251,10 @@ router.post('/:id(\\d+)/invite', async (req, res) => {
     }
     const historicalMemberships = getHistoricalWorkspaceMemberships(targetEmail);
     const historicalWorkspaceIds = Array.from(new Set(
-      historicalMemberships
-        .map(item => normalizeWorkspaceId(item.workspace_id))
-        .filter(Boolean)
+      [
+        ...historicalMemberships.map(item => normalizeWorkspaceId(item.workspace_id)),
+        ...getEmailReservedWorkspaceIds(targetEmail),
+      ].filter(Boolean)
     ));
     const selectedWorkspaceId = normalizeWorkspaceId(workspaceId);
     const selectedWorkspaceName = normalizeWorkspaceName(workspaceName);
@@ -2362,9 +2480,10 @@ router.post('/auto-invite', async (req, res) => {
     }
     const historicalMemberships = getHistoricalWorkspaceMemberships(targetEmail);
     const historicalWorkspaceIds = Array.from(new Set(
-      historicalMemberships
-        .map(item => normalizeWorkspaceId(item.workspace_id))
-        .filter(Boolean)
+      [
+        ...historicalMemberships.map(item => normalizeWorkspaceId(item.workspace_id)),
+        ...getEmailReservedWorkspaceIds(targetEmail),
+      ].filter(Boolean)
     ));
     const preferredWorkspaceBlockedByHistory = preferredWorkspaceId
       ? historicalWorkspaceIds.includes(preferredWorkspaceId)
