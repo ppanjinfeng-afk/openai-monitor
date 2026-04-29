@@ -31,6 +31,8 @@ router.put('/', (req, res) => {
     'public_tunnel_enabled',
     'cdk_team_price_cents',
     'untracked_members_auto_kick_enabled',
+    'stale_members_auto_kick_enabled',
+    'stale_members_auto_kick_hours',
   ];
 
   const updateAll = db.transaction(() => {
@@ -44,6 +46,17 @@ router.put('/', (req, res) => {
             throw err;
           }
           update.run(key, String(cents));
+          continue;
+        }
+
+        if (key === 'stale_members_auto_kick_hours') {
+          const hours = Number.parseFloat(value);
+          if (!Number.isFinite(hours) || hours < 1 || hours > 720) {
+            const err = new Error('Auto kick hours must be between 1 and 720');
+            err.statusCode = 400;
+            throw err;
+          }
+          update.run(key, String(hours));
           continue;
         }
 

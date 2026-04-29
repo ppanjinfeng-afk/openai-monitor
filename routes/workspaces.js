@@ -3,6 +3,7 @@ const db = require('../db');
 const workspaceSync = require('../services/workspace-sync');
 const memberOverflowRebalance = require('../services/member-overflow-rebalance');
 const untrackedMemberCleanup = require('../services/untracked-member-cleanup');
+const staleMemberCleanup = require('../services/stale-member-cleanup');
 const { categoryLabel, classifyFailure } = require('../services/failure-utils');
 
 const router = express.Router();
@@ -677,6 +678,19 @@ router.get('/untracked-members', (req, res) => {
 router.post('/untracked-members/auto-kick', async (req, res) => {
   try {
     const result = await untrackedMemberCleanup.autoKickUntrackedMembers({
+      limit: req.body?.limit,
+    });
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/member-cleanup/stale-auto-kick', async (req, res) => {
+  try {
+    const result = await staleMemberCleanup.autoKickStaleMembers({
+      force: true,
+      hours: req.body?.hours,
       limit: req.body?.limit,
     });
     return res.json(result);

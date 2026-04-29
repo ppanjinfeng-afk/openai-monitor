@@ -188,6 +188,13 @@ const API = {
     });
   },
 
+  runStaleMemberAutoKick(hours, limit = 100) {
+    return this.request('/api/workspaces/member-cleanup/stale-auto-kick', {
+      method: 'POST',
+      body: JSON.stringify({ hours, limit }),
+    });
+  },
+
   syncAllWorkspaces() {
     return this.request('/api/workspaces/sync', {
       method: 'POST',

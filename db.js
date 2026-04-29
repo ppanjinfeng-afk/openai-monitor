@@ -337,6 +337,8 @@ const defaultSettings = [
   ['public_tunnel_enabled', 'true'],
   ['cdk_team_price_cents', String(Number.parseInt(process.env.CDK_TEAM_PRICE_CENTS || '200', 10) || 200)],
   ['untracked_members_auto_kick_enabled', 'false'],
+  ['stale_members_auto_kick_enabled', 'false'],
+  ['stale_members_auto_kick_hours', '26'],
 ];
 const insertDefaults = db.transaction(() => {
   for (const [key, value] of defaultSettings) {

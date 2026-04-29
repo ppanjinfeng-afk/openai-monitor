@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=20260429-member-age">
+  <link rel="stylesheet" href="/css/style.css?v=20260429-stale-kick">
 </head>
 <body>
   <div id="app">
@@ -832,6 +832,37 @@
                   </div>
                 </div>
               </div>
+              <div class="panel section-spacer-top">
+                <div class="panel-header">
+                  <h2>超时自动踢人</h2>
+                </div>
+                <div class="panel-body">
+                  <div class="form-group">
+                    <label class="toggle-label">
+                      <input type="checkbox" id="stale-members-auto-kick-enabled">
+                      <span class="toggle-switch"></span>
+                      <span>自动踢出加入超时成员</span>
+                    </label>
+                  </div>
+                  <div class="form-group">
+                    <label for="stale-members-auto-kick-hours">超过多少小时踢出</label>
+                    <input type="number" id="stale-members-auto-kick-hours" class="form-input" min="1" max="720" step="1" value="26">
+                  </div>
+                  <div class="form-group">
+                    <label>当前状态</label>
+                    <div class="surface-chip-row">
+                      <span class="quota-sync-badge skipped" id="stale-members-auto-kick-status">自动踢人已关闭</span>
+                    </div>
+                  </div>
+                  <div class="dashboard-alert-item danger">
+                    <div class="dashboard-alert-detail">开启后，系统每轮同步检查后会自动踢出加入时间超过阈值的普通成员；所有者不会被踢出。</div>
+                  </div>
+                  <div class="form-actions compact-form-actions section-spacer-top">
+                    <button class="btn btn-secondary" id="btn-save-stale-member-auto-kick">保存设置</button>
+                    <button class="btn btn-danger" id="btn-run-stale-member-auto-kick">立即执行一次</button>
+                  </div>
+                </div>
+              </div>
             </aside>
           </div>
         </div>
@@ -1402,9 +1433,9 @@
   <!-- Toast Container -->
   <div class="toast-container" id="toast-container"></div>
 
-  <script src="/js/api.js?v=20260429-member-age"></script>
+  <script src="/js/api.js?v=20260429-stale-kick"></script>
   <script src="/js/components.js?v=20260429-member-age"></script>
-  <script src="/js/app.js?v=20260429-member-age"></script>
+  <script src="/js/app.js?v=20260429-stale-kick"></script>
 </body>
 </html>
 

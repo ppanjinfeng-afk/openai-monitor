@@ -281,7 +281,7 @@ const App = {
         break;
       }
       case 'member-cleanup':
-        await this.loadMemberCleanup();
+        await Promise.all([this.loadStaleMemberAutoKickSetting(), this.loadMemberCleanup()]);
         break;
       case 'untracked-members':
         await Promise.all([this.loadUntrackedAutoKickSetting(), this.loadUntrackedMembers()]);
@@ -938,6 +938,7 @@ const App = {
       document.getElementById('public-tunnel-enabled').checked = publicTunnelEnabled;
       this.updatePublicTunnelStatus(publicTunnelEnabled);
       this.applyUntrackedAutoKickSetting(settings);
+      this.applyStaleMemberAutoKickSetting(settings);
       this.applyCdkPriceSetting(settings);
     } catch (err) {
       console.error('Failed to load settings:', err);
@@ -982,6 +983,102 @@ const App = {
       this.toast(checkbox.checked ? '没有来源记录自动踢人已开启' : '没有来源记录自动踢人已关闭', 'success');
     } catch (err) {
       this.toast(`保存自动踢人开关失败: ${err.message}`, 'error');
+    }
+  },
+
+  getStaleMemberAutoKickHoursInput() {
+    const input = document.getElementById('stale-members-auto-kick-hours');
+    const hours = Number.parseFloat(input?.value || '26');
+    if (!Number.isFinite(hours) || hours < 1 || hours > 720) {
+      return null;
+    }
+    return hours;
+  },
+
+  applyStaleMemberAutoKickSetting(settings = {}) {
+    const checkbox = document.getElementById('stale-members-auto-kick-enabled');
+    const input = document.getElementById('stale-members-auto-kick-hours');
+    const status = document.getElementById('stale-members-auto-kick-status');
+    const enabled = settings.stale_members_auto_kick_enabled === 'true';
+    const hours = Number.parseFloat(settings.stale_members_auto_kick_hours || '26') || 26;
+
+    if (checkbox) {
+      checkbox.checked = enabled;
+    }
+
+    if (input) {
+      input.value = String(Math.max(1, Math.min(hours, 720)));
+    }
+
+    if (status) {
+      status.className = `quota-sync-badge ${enabled ? 'warning' : 'skipped'}`;
+      status.textContent = enabled ? `已开启，超过 ${hours} 小时自动踢出` : '自动踢人已关闭';
+    }
+  },
+
+  async loadStaleMemberAutoKickSetting() {
+    try {
+      const settings = await API.getSettings();
+      this.applyStaleMemberAutoKickSetting(settings);
+    } catch (err) {
+      console.error('Failed to load stale member auto kick setting:', err);
+    }
+  },
+
+  async saveStaleMemberAutoKickSetting() {
+    const checkbox = document.getElementById('stale-members-auto-kick-enabled');
+    if (!checkbox) {
+      return;
+    }
+
+    const hours = this.getStaleMemberAutoKickHoursInput();
+    if (!hours) {
+      this.toast('自动踢人小时数必须在 1 到 720 之间', 'error');
+      return;
+    }
+
+    try {
+      const settings = await API.updateSettings({
+        stale_members_auto_kick_enabled: checkbox.checked ? 'true' : 'false',
+        stale_members_auto_kick_hours: String(hours),
+      });
+      this.applyStaleMemberAutoKickSetting(settings);
+      this.toast(checkbox.checked ? `超时自动踢人已开启：超过 ${hours} 小时` : '超时自动踢人已关闭', 'success');
+    } catch (err) {
+      this.toast(`保存超时自动踢人设置失败: ${err.message}`, 'error');
+    }
+  },
+
+  async runStaleMemberAutoKickNow() {
+    const hours = this.getStaleMemberAutoKickHoursInput();
+    if (!hours) {
+      this.toast('自动踢人小时数必须在 1 到 720 之间', 'error');
+      return;
+    }
+
+    if (!confirm(`确定立即踢出加入超过 ${hours} 小时的普通成员吗？所有者不会被踢出。`)) {
+      return;
+    }
+
+    const button = document.getElementById('btn-run-stale-member-auto-kick');
+    if (button) {
+      button.disabled = true;
+      button.classList.add('loading');
+    }
+
+    try {
+      const result = await API.runStaleMemberAutoKick(hours);
+      this.memberCleanupSelection = new Set();
+      await this.loadMemberCleanup({ silent: true });
+      this.toast(`超时自动踢人完成：成功 ${result.removed || 0} 个，失败 ${result.failed || 0} 个`, result.failed ? 'warning' : 'success');
+    } catch (err) {
+      this.toast(`超时自动踢人失败: ${err.message}`, 'error');
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.classList.remove('loading');
+      }
+      this.renderMemberCleanup();
     }
   },
 
@@ -4454,6 +4551,34 @@ const App = {
     if (btnMemberCleanupRevokeSelected) {
       btnMemberCleanupRevokeSelected.addEventListener('click', () => {
         this.revokeSelectedMemberCleanupInvites();
+      });
+    }
+
+    const staleMembersAutoKickEnabled = document.getElementById('stale-members-auto-kick-enabled');
+    if (staleMembersAutoKickEnabled) {
+      staleMembersAutoKickEnabled.addEventListener('change', () => {
+        this.saveStaleMemberAutoKickSetting();
+      });
+    }
+
+    const staleMembersAutoKickHours = document.getElementById('stale-members-auto-kick-hours');
+    if (staleMembersAutoKickHours) {
+      staleMembersAutoKickHours.addEventListener('change', () => {
+        this.saveStaleMemberAutoKickSetting();
+      });
+    }
+
+    const btnSaveStaleMemberAutoKick = document.getElementById('btn-save-stale-member-auto-kick');
+    if (btnSaveStaleMemberAutoKick) {
+      btnSaveStaleMemberAutoKick.addEventListener('click', () => {
+        this.saveStaleMemberAutoKickSetting();
+      });
+    }
+
+    const btnRunStaleMemberAutoKick = document.getElementById('btn-run-stale-member-auto-kick');
+    if (btnRunStaleMemberAutoKick) {
+      btnRunStaleMemberAutoKick.addEventListener('click', () => {
+        this.runStaleMemberAutoKickNow();
       });
     }
 
