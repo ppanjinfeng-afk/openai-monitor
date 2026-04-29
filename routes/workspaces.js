@@ -263,9 +263,11 @@ router.get('/', (req, res) => {
 router.post('/sync', async (req, res) => {
   try {
     const results = await workspaceSync.syncAllWorkspaceSnapshots();
+    const untrackedCleanup = await untrackedMemberCleanup.autoKickUntrackedMembers({ limit: 500 });
     const rebalance = await memberOverflowRebalance.rebalanceOverflowMembers();
     res.json({
       summary: workspaceSync.summarizeWorkspaceSync(results),
+      untracked_cleanup: untrackedCleanup,
       rebalance,
       results,
     });
@@ -291,9 +293,11 @@ router.post('/:id(\\d+)/sync', async (req, res) => {
     if (!result.success) {
       return res.status(500).json({ error: result.message });
     }
+    const untrackedCleanup = await untrackedMemberCleanup.autoKickUntrackedMembers({ limit: 500 });
     const rebalance = await memberOverflowRebalance.rebalanceOverflowMembers();
     return res.json({
       ...result,
+      untracked_cleanup: untrackedCleanup,
       rebalance,
     });
   } catch (err) {

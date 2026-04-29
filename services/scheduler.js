@@ -55,11 +55,9 @@ async function runCheckCycle(trigger = 'manual') {
 
   try {
     releaseStaleProcessingCdks({ log: true });
-    runMemberCleanupCycle(`${trigger}-parallel`).catch(err => {
-      console.error(`[Scheduler] member cleanup failed during ${trigger}:`, err.message);
-    });
     await checker.checkAllAccounts();
     await workspaceSync.syncAllWorkspaceSnapshots();
+    await runMemberCleanupCycle(`${trigger}-after-sync`);
     await memberOverflowRebalance.rebalanceOverflowMembers();
     await quotaSync.syncAllAccountUsage();
     return true;

@@ -2638,7 +2638,7 @@ const App = {
       return;
     }
 
-    if (members.length === 0) {
+    if (totalSelected === 0) {
       this.toast('当前没有可批量踢出的成员', 'warning');
       return;
     }
@@ -2861,6 +2861,7 @@ const App = {
 
   makeUntrackedMembersSelectionKey(item) {
     return [
+      String(item?.item_type || 'member'),
       Number(item?.account_id || 0),
       String(item?.workspace_id || ''),
       String(item?.user_id || item?.email || ''),
@@ -2887,7 +2888,10 @@ const App = {
     const btnClear = document.getElementById('btn-untracked-members-clear-selection');
     const btnKick = document.getElementById('btn-untracked-members-kick-selected');
     const items = Array.isArray(this.untrackedMembersData?.items) ? this.untrackedMembersData.items : [];
-    const selectableItems = items.filter(item => !Number(item.is_owner || 0) && item.account_id && item.user_id);
+    const selectableItems = items.filter(item => (
+      (item.item_type === 'pending' && item.account_id && item.email) ||
+      (item.item_type !== 'pending' && !Number(item.is_owner || 0) && item.account_id && item.user_id)
+    ));
     const selectedItems = items.filter(item => this.untrackedMembersSelection.has(item.selection_key));
     const allSelected = selectableItems.length > 0 && selectableItems.every(item => this.untrackedMembersSelection.has(item.selection_key));
 
@@ -3087,7 +3091,10 @@ const App = {
 
   toggleUntrackedMembersSelectAll() {
     const items = (Array.isArray(this.untrackedMembersData?.items) ? this.untrackedMembersData.items : [])
-      .filter(item => !Number(item.is_owner || 0) && item.account_id && item.user_id);
+      .filter(item => (
+        (item.item_type === 'pending' && item.account_id && item.email) ||
+        (item.item_type !== 'pending' && !Number(item.is_owner || 0) && item.account_id && item.user_id)
+      ));
 
     const allSelected = items.length > 0 && items.every(item => this.untrackedMembersSelection.has(item.selection_key));
     if (allSelected) {
@@ -3137,17 +3144,45 @@ const App = {
     }
   },
 
-  async removeSelectedUntrackedMembers() {
-    const members = (Array.isArray(this.untrackedMembersData?.items) ? this.untrackedMembersData.items : [])
-      .filter(item => this.untrackedMembersSelection.has(item.selection_key))
-      .filter(item => !Number(item.is_owner || 0) && item.account_id && item.user_id);
+  async revokeUntrackedPendingInvite(accountId, email, workspaceId = '', workspaceName = '', planType = '', workspaceRowId = 0, remoteInviteId = '') {
+    const label = email || remoteInviteId;
+    const workspaceLabel = workspaceName || workspaceId || 'current workspace';
+    if (!confirm(`确认撤销 ${workspaceLabel} 里的无来源待邀请 ${label} 吗？`)) {
+      return;
+    }
 
-    if (members.length === 0) {
+    try {
+      await API.revokePendingInvite(accountId, {
+        email,
+        remote_invite_id: remoteInviteId,
+        workspace_id: workspaceId,
+        workspace_name: workspaceName,
+        plan_type: planType,
+        skip_sync: '1',
+      });
+      this.untrackedMembersSelection = new Set();
+      this.toast(`已撤销 ${label} 的待邀请`, 'success');
+      await this.refreshUntrackedMembersSurfaces([workspaceRowId]);
+    } catch (err) {
+      this.toast(`撤销待邀请失败: ${err.message}`, 'error');
+    }
+  },
+
+  async removeSelectedUntrackedMembers() {
+    const selectedItems = (Array.isArray(this.untrackedMembersData?.items) ? this.untrackedMembersData.items : [])
+      .filter(item => this.untrackedMembersSelection.has(item.selection_key));
+    const members = selectedItems
+      .filter(item => item.item_type !== 'pending' && !Number(item.is_owner || 0) && item.account_id && item.user_id);
+    const pendingInvites = selectedItems
+      .filter(item => item.item_type === 'pending' && item.account_id && item.email);
+    const totalSelected = members.length + pendingInvites.length;
+
+    if (totalSelected === 0) {
       this.toast('请先勾选要踢出的成员', 'warning');
       return;
     }
 
-    if (!confirm(`确定踢出已选中的 ${members.length} 个没有来源记录的成员吗？`)) {
+    if (!confirm(`确定处理已选中的 ${totalSelected} 个没有来源记录的成员/待邀请吗？`)) {
       return;
     }
 
@@ -3162,33 +3197,51 @@ const App = {
     const workspaceRows = new Set();
 
     try {
-      members.forEach(member => {
+      [...members, ...pendingInvites].forEach(member => {
         if (member.workspace_row_id) {
           workspaceRows.add(Number(member.workspace_row_id));
         }
       });
 
-      const result = await API.removeMembersBatch(
-        members.map((member, index) => ({
-          client_index: index,
-          account_id: member.account_id,
-          user_id: member.user_id,
-          workspace_id: member.workspace_id,
-          workspace_name: member.workspace_name || member.workspace_id,
-          plan_type: member.plan_type || '',
-          email: member.email || '',
-          workspace_row_id: member.workspace_row_id || 0,
-        })),
-        {
-          workspace_concurrency: 2,
-          member_concurrency: 4,
-        }
-      );
+      if (members.length > 0) {
+        const result = await API.removeMembersBatch(
+          members.map((member, index) => ({
+            client_index: index,
+            account_id: member.account_id,
+            user_id: member.user_id,
+            workspace_id: member.workspace_id,
+            workspace_name: member.workspace_name || member.workspace_id,
+            plan_type: member.plan_type || '',
+            email: member.email || '',
+            workspace_row_id: member.workspace_row_id || 0,
+          })),
+          {
+            workspace_concurrency: 2,
+            member_concurrency: 4,
+          }
+        );
 
-      successCount = Number(result.removed || 0);
-      (Array.isArray(result.results) ? result.results : [])
-        .filter(item => !item.success)
-        .forEach(item => failed.push(`${item.email || item.userId || item.user_id || '-'}: ${item.message || 'Remove failed'}`));
+        successCount += Number(result.removed || 0);
+        (Array.isArray(result.results) ? result.results : [])
+          .filter(item => !item.success)
+          .forEach(item => failed.push(`${item.email || item.userId || item.user_id || '-'}: ${item.message || 'Remove failed'}`));
+      }
+
+      for (const invite of pendingInvites) {
+        try {
+          await API.revokePendingInvite(invite.account_id, {
+            email: invite.email || '',
+            remote_invite_id: invite.remote_invite_id || '',
+            workspace_id: invite.workspace_id || '',
+            workspace_name: invite.workspace_name || invite.workspace_id,
+            plan_type: invite.plan_type || '',
+            skip_sync: '1',
+          });
+          successCount += 1;
+        } catch (err) {
+          failed.push(`${invite.email || '-'}: ${err.message || 'Revoke failed'}`);
+        }
+      }
 
       this.untrackedMembersSelection = new Set();
       await this.refreshUntrackedMembersSurfaces(Array.from(workspaceRows));

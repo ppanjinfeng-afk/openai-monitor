@@ -1929,8 +1929,13 @@ user2@example.com,pass456,\u8d26\u53f72'></textarea>
   },
 
   untrackedMemberRow(item, selected = false) {
-    const canKick = !Number(item.is_owner || 0) && item.account_id && item.user_id;
+    const isPending = item.item_type === 'pending';
+    const canKick = !isPending && !Number(item.is_owner || 0) && item.account_id && item.user_id;
+    const canRevoke = isPending && item.account_id && item.email;
+    const canSelect = canKick || canRevoke;
+    const eventTime = isPending ? item.invited_at : item.joined_at;
     const roleParts = [
+      isPending ? this.quotaPill('待邀请', 'warning') : '',
       item.role ? this.quotaPill(this.memberRoleLabel(item.role), 'neutral') : '',
       item.seat_type ? this.quotaPill(this.seatTypeLabel(item.seat_type), 'accent') : '',
     ].filter(Boolean).join('');
@@ -1942,6 +1947,9 @@ user2@example.com,pass456,\u8d26\u53f72'></textarea>
       canKick
         ? `<button class="member-inline-btn danger" onclick="App.removeUntrackedMemberItem(${Number(item.account_id || 0)}, ${this.jsString(item.user_id || '')}, ${this.jsString(item.workspace_id || '')}, ${this.jsString(item.workspace_name || item.workspace_id || '')}, ${this.jsString(item.plan_type || '')}, ${this.jsString(item.email || '')}, ${Number(item.workspace_row_id || 0)})">踢出</button>`
         : '',
+      canRevoke
+        ? `<button class="member-inline-btn warn" onclick="App.revokeUntrackedPendingInvite(${Number(item.account_id || 0)}, ${this.jsString(item.email || '')}, ${this.jsString(item.workspace_id || '')}, ${this.jsString(item.workspace_name || item.workspace_id || '')}, ${this.jsString(item.plan_type || '')}, ${Number(item.workspace_row_id || 0)}, ${this.jsString(item.remote_invite_id || '')})">撤销待邀请</button>`
+        : '',
     ].filter(Boolean).join('');
 
     return `
@@ -1950,7 +1958,7 @@ user2@example.com,pass456,\u8d26\u53f72'></textarea>
           <input
             type="checkbox"
             ${selected ? 'checked' : ''}
-            ${canKick ? '' : 'disabled'}
+            ${canSelect ? '' : 'disabled'}
             onchange="App.toggleUntrackedMembersSelection(${this.jsString(item.selection_key)}, this.checked)"
           >
         </td>
@@ -1979,8 +1987,8 @@ user2@example.com,pass456,\u8d26\u53f72'></textarea>
         </td>
         <td>
           <div class="member-cleanup-time">
-            <strong>${this.escapeHtml(this.formatDateTime(item.joined_at))}</strong>
-            <span class="text-muted text-xs">${this.escapeHtml(this.timeAgo(item.joined_at))}</span>
+            <strong>${this.escapeHtml(this.formatDateTime(eventTime))}</strong>
+            <span class="text-muted text-xs">${this.escapeHtml(this.timeAgo(eventTime))}</span>
           </div>
         </td>
         <td>
