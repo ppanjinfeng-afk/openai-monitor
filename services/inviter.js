@@ -629,6 +629,7 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
   }
   }, {
     label: `team-invite:${account.email || account.id || 'account'}`,
+    lane: 'invite',
     priority: 10,
   });
 }

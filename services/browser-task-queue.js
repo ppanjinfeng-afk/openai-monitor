@@ -15,7 +15,17 @@ function getBrowserTaskConcurrency() {
   );
 }
 
+function getMaintenanceConcurrency() {
+  const total = getBrowserTaskConcurrency();
+  return normalizeConcurrency(
+    process.env.BROWSER_MAINTENANCE_CONCURRENCY,
+    Math.max(1, total - 1),
+    total
+  );
+}
+
 let activeCount = 0;
+let activeMaintenanceCount = 0;
 let sequence = 0;
 const queue = [];
 
@@ -34,12 +44,15 @@ function maybeLogQueueState(event, item) {
   }
 
   console.log(
-    `[BrowserTaskQueue] ${event}: ${item?.label || '-'} active=${activeCount} queued=${queue.length} limit=${getBrowserTaskConcurrency()}`
+    `[BrowserTaskQueue] ${event}: ${item?.label || '-'} lane=${item?.lane || '-'} active=${activeCount} maintenance=${activeMaintenanceCount} queued=${queue.length} limit=${getBrowserTaskConcurrency()} maintenanceLimit=${getMaintenanceConcurrency()}`
   );
 }
 
 function runItem(item) {
   activeCount += 1;
+  if (item.lane === 'maintenance') {
+    activeMaintenanceCount += 1;
+  }
   maybeLogQueueState('start', item);
 
   Promise.resolve()
@@ -47,17 +60,37 @@ function runItem(item) {
     .then(item.resolve, item.reject)
     .finally(() => {
       activeCount = Math.max(0, activeCount - 1);
+      if (item.lane === 'maintenance') {
+        activeMaintenanceCount = Math.max(0, activeMaintenanceCount - 1);
+      }
       maybeLogQueueState('finish', item);
       drainQueue();
     });
 }
 
+function canRunItem(item, limit, maintenanceLimit) {
+  if (activeCount >= limit) {
+    return false;
+  }
+
+  if (item.lane !== 'maintenance') {
+    return true;
+  }
+
+  return activeMaintenanceCount < maintenanceLimit;
+}
+
 function drainQueue() {
   const limit = getBrowserTaskConcurrency();
+  const maintenanceLimit = getMaintenanceConcurrency();
 
   while (activeCount < limit && queue.length > 0) {
     sortQueue();
-    const item = queue.shift();
+    const itemIndex = queue.findIndex(candidate => canRunItem(candidate, limit, maintenanceLimit));
+    if (itemIndex === -1) {
+      return;
+    }
+    const [item] = queue.splice(itemIndex, 1);
     runItem(item);
   }
 }
@@ -71,6 +104,7 @@ function withBrowserTask(work, options = {}) {
   const item = {
     id: ++sequence,
     label: String(options.label || 'browser-task'),
+    lane: options.lane === 'invite' ? 'invite' : 'maintenance',
     priority: Number.isFinite(priority) ? priority : 0,
     work,
     resolve: null,
@@ -89,8 +123,10 @@ function withBrowserTask(work, options = {}) {
 function getBrowserTaskStats() {
   return {
     active: activeCount,
+    activeMaintenance: activeMaintenanceCount,
     queued: queue.length,
     limit: getBrowserTaskConcurrency(),
+    maintenanceLimit: getMaintenanceConcurrency(),
   };
 }
 
@@ -98,4 +134,5 @@ module.exports = {
   withBrowserTask,
   getBrowserTaskStats,
   getBrowserTaskConcurrency,
+  getMaintenanceConcurrency,
 };
