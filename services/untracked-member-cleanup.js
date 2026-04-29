@@ -129,7 +129,21 @@ function markMemberRemoved(item) {
   `).run(item.id);
 }
 
-async function removeUntrackedMember(item) {
+function groupMembersForRemoval(members = []) {
+  const groups = new Map();
+
+  for (const member of members) {
+    const key = `${member.account_id || 0}:${member.workspace_id || ''}`;
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key).push(member);
+  }
+
+  return Array.from(groups.values());
+}
+
+async function removeUntrackedMember(item, options = {}) {
   if (!item?.account_id || !item?.user_id || Number(item.is_owner || 0) === 1) {
     return {
       success: false,
@@ -138,7 +152,7 @@ async function removeUntrackedMember(item) {
     };
   }
 
-  const account = db.prepare(`SELECT * FROM accounts WHERE id = ?`).get(item.account_id);
+  const account = options.account || db.prepare(`SELECT * FROM accounts WHERE id = ?`).get(item.account_id);
   if (!account?.access_token) {
     return {
       success: false,
@@ -151,6 +165,7 @@ async function removeUntrackedMember(item) {
     workspaceId: item.workspace_id || '',
     workspaceName: item.workspace_name || item.workspace_id || '',
     planType: item.plan_type || '',
+    page: options.page,
   });
 
   if (!result.success) {
@@ -187,6 +202,64 @@ async function removeUntrackedMember(item) {
   };
 }
 
+async function removeUntrackedMembersWithSharedPages(members) {
+  const results = [];
+  const workspaceRows = new Set();
+  let removed = 0;
+  let failed = 0;
+
+  for (const group of groupMembersForRemoval(members)) {
+    const first = group[0];
+    const account = db.prepare(`SELECT * FROM accounts WHERE id = ?`).get(first.account_id);
+
+    if (!account?.access_token) {
+      for (const member of group) {
+        failed += 1;
+        results.push({
+          success: false,
+          email: member.email || '',
+          workspace_id: member.workspace_id || '',
+          workspace_name: member.workspace_name || '',
+          account_id: member.account_id,
+          account_email: member.account_email || '',
+          message: 'Account is not authorized, cannot remove member',
+        });
+      }
+      continue;
+    }
+
+    await workspaceMembers.withWorkspacePage(async page => {
+      for (const member of group) {
+        try {
+          const result = await removeUntrackedMember(member, { account, page });
+          results.push(result);
+          if (result.success) {
+            removed += 1;
+            if (result.workspace_row_id) {
+              workspaceRows.add(Number(result.workspace_row_id));
+            }
+          } else {
+            failed += 1;
+          }
+        } catch (err) {
+          failed += 1;
+          results.push({
+            success: false,
+            email: member.email || '',
+            workspace_id: member.workspace_id || '',
+            workspace_name: member.workspace_name || '',
+            account_id: member.account_id,
+            account_email: member.account_email || '',
+            message: err.message,
+          });
+        }
+      }
+    });
+  }
+
+  return { results, removed, failed, workspaceRows };
+}
+
 async function autoKickUntrackedMembers(options = {}) {
   if (!isAutoKickEnabled()) {
     return {
@@ -204,36 +277,7 @@ async function autoKickUntrackedMembers(options = {}) {
     .filter(item => !Number(item.is_owner || 0) && item.account_id && item.user_id)
     .slice(0, limit);
 
-  const results = [];
-  let removed = 0;
-  let failed = 0;
-  const workspaceRows = new Set();
-
-  for (const member of members) {
-    try {
-      const result = await removeUntrackedMember(member);
-      results.push(result);
-      if (result.success) {
-        removed += 1;
-        if (result.workspace_row_id) {
-          workspaceRows.add(Number(result.workspace_row_id));
-        }
-      } else {
-        failed += 1;
-      }
-    } catch (err) {
-      failed += 1;
-      results.push({
-        success: false,
-        email: member.email || '',
-        workspace_id: member.workspace_id || '',
-        workspace_name: member.workspace_name || '',
-        account_id: member.account_id,
-        account_email: member.account_email || '',
-        message: err.message,
-      });
-    }
-  }
+  const { results, removed, failed, workspaceRows } = await removeUntrackedMembersWithSharedPages(members);
 
   for (const workspaceRowId of workspaceRows) {
     await workspaceSync.syncWorkspaceByRowId(workspaceRowId).catch(err => {

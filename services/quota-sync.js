@@ -7,6 +7,23 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function normalizeConcurrency(value, fallback = 2, max = 4) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return Math.max(1, Math.min(Math.floor(parsed), max));
+}
+
+function getQuotaSyncConcurrency() {
+  return normalizeConcurrency(
+    process.env.QUOTA_SYNC_CONCURRENCY || process.env.SYNC_CONCURRENCY,
+    2,
+    4
+  );
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -372,7 +389,7 @@ async function syncAllAccountUsage() {
     return syncInFlight;
   }
 
-  syncInFlight = withQuotaPage(async page => {
+  syncInFlight = (async () => {
     const accounts = db.prepare(`
       SELECT *
       FROM accounts
@@ -382,30 +399,47 @@ async function syncAllAccountUsage() {
       ORDER BY id ASC
     `).all();
 
-    const results = [];
-
-    for (const account of accounts) {
-      try {
-        const result = await syncSingleAccountUsage(account, { page });
-        results.push(result);
-      } catch (err) {
-        results.push({
-          success: false,
-          accountId: account.id,
-          email: account.email,
-          message: err.message,
-        });
-      }
-
-      await sleep(400);
+    if (accounts.length === 0) {
+      return [];
     }
+
+    const results = [];
+    let nextIndex = 0;
+    const workerCount = Math.min(getQuotaSyncConcurrency(), accounts.length);
+
+    const workers = Array.from({ length: workerCount }, () => withQuotaPage(async page => {
+      while (true) {
+        const account = accounts[nextIndex];
+        nextIndex += 1;
+
+        if (!account) {
+          break;
+        }
+
+        try {
+          const result = await syncSingleAccountUsage(account, { page });
+          results.push(result);
+        } catch (err) {
+          results.push({
+            success: false,
+            accountId: account.id,
+            email: account.email,
+            message: err.message,
+          });
+        }
+
+        await sleep(150);
+      }
+    }));
+
+    await Promise.all(workers);
 
     const summary = summarizeQuotaResults(results);
     console.log(
       `[QuotaSync] Synced ${summary.synced}/${accounts.length} active accounts, failed ${summary.failed}, over quota ${summary.overQuota}`
     );
     return results;
-  });
+  })();
 
   try {
     return await syncInFlight;

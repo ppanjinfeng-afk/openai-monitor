@@ -7,6 +7,23 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function normalizeConcurrency(value, fallback = 2, max = 4) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return Math.max(1, Math.min(Math.floor(parsed), max));
+}
+
+function getWorkspaceSyncConcurrency() {
+  return normalizeConcurrency(
+    process.env.WORKSPACE_SYNC_CONCURRENCY || process.env.SYNC_CONCURRENCY,
+    2,
+    4
+  );
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -730,9 +747,23 @@ async function syncAllWorkspaceSnapshots() {
     ORDER BY id ASC
   `).all();
 
-  return withWorkspacePage(async page => {
-    const results = [];
-    for (const account of accounts) {
+  if (accounts.length === 0) {
+    return [];
+  }
+
+  const results = [];
+  let nextIndex = 0;
+  const workerCount = Math.min(getWorkspaceSyncConcurrency(), accounts.length);
+
+  const workers = Array.from({ length: workerCount }, () => withWorkspacePage(async page => {
+    while (true) {
+      const account = accounts[nextIndex];
+      nextIndex += 1;
+
+      if (!account) {
+        break;
+      }
+
       try {
         if (account.status === 'active' && account.access_token) {
           results.push(await syncAccountWorkspacesWithPage(page, account));
@@ -747,11 +778,13 @@ async function syncAllWorkspaceSnapshots() {
           message: err.message,
         });
       }
-      await sleep(400);
-    }
 
-    return results;
-  });
+      await sleep(150);
+    }
+  }));
+
+  await Promise.all(workers);
+  return results;
 }
 
 async function syncWorkspaceByRowId(rowId) {

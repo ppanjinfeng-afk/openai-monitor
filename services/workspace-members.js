@@ -456,6 +456,7 @@ async function listMembers(account, params = {}) {
     workspaceId: params.workspaceId || '',
     workspaceName: params.workspaceName || '',
     planType: params.planType || '',
+    page: params.page,
   });
 }
 
@@ -464,6 +465,7 @@ async function getMemberDetail(account, userId, options = {}) {
     workspaceId: options.workspaceId || '',
     workspaceName: options.workspaceName || '',
     planType: options.planType || '',
+    page: options.page,
   });
 }
 
@@ -472,6 +474,7 @@ async function updateMember(account, userId, params = {}, options = {}) {
     workspaceId: options.workspaceId || params.workspaceId || '',
     workspaceName: options.workspaceName || params.workspaceName || '',
     planType: options.planType || params.planType || '',
+    page: options.page,
   });
 }
 
@@ -480,6 +483,7 @@ async function removeMember(account, userId, options = {}) {
     workspaceId: options.workspaceId || '',
     workspaceName: options.workspaceName || '',
     planType: options.planType || '',
+    page: options.page,
   });
 }
 
@@ -488,6 +492,7 @@ async function logoutMember(account, userId, options = {}) {
     workspaceId: options.workspaceId || '',
     workspaceName: options.workspaceName || '',
     planType: options.planType || '',
+    page: options.page,
   });
 }
 
@@ -499,10 +504,12 @@ async function revokePendingInvite(account, params = {}, options = {}) {
     workspaceId: options.workspaceId || params.workspaceId || '',
     workspaceName: options.workspaceName || params.workspaceName || '',
     planType: options.planType || params.planType || '',
+    page: options.page,
   });
 }
 
 module.exports = {
+  withWorkspacePage,
   listMembers,
   getMemberDetail,
   updateMember,

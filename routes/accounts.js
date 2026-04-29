@@ -150,6 +150,9 @@ const ACCOUNT_INVITE_HEALTH_SELECT_SQL = `
   ${INVITE_HEALTH_LABEL_SQL} AS invite_health_label
 `;
 const inviteWorkspaceReservations = new Map();
+const postInviteSyncQueue = [];
+const postInviteSyncByAccountId = new Map();
+let postInviteSyncRunning = false;
 
 function normalizeEmail(email) {
   return String(email || '').trim();
@@ -1455,6 +1458,71 @@ function shouldSyncQuotaAfterInvite(account, result, requestedWorkspaceId = '') 
   return finalWorkspaceId === quotaWorkspaceId;
 }
 
+function getQuotaSyncSkippedReasonAfterInvite(account, result) {
+  const finalWorkspaceId = normalizeWorkspaceId(result.workspace_id || result.workspaceId);
+  const quotaWorkspaceId = normalizeWorkspaceId(account.quota_workspace_id);
+
+  if (finalWorkspaceId && quotaWorkspaceId && finalWorkspaceId !== quotaWorkspaceId) {
+    return '当前账号已绑定其他工作区的配额同步，本次指定工作区邀请后未自动刷新名额';
+  }
+
+  return null;
+}
+
+function enqueuePostInviteSync(account, shouldSyncQuota) {
+  if (!account?.id) {
+    return;
+  }
+
+  const existing = postInviteSyncByAccountId.get(account.id);
+  if (existing) {
+    existing.shouldSyncQuota = existing.shouldSyncQuota || shouldSyncQuota;
+    return;
+  }
+
+  const item = { account, shouldSyncQuota };
+  postInviteSyncByAccountId.set(account.id, item);
+  postInviteSyncQueue.push(item);
+  setImmediate(processPostInviteSyncQueue);
+}
+
+async function processPostInviteSyncQueue() {
+  if (postInviteSyncRunning) {
+    return;
+  }
+
+  postInviteSyncRunning = true;
+
+  try {
+    while (postInviteSyncQueue.length > 0) {
+      const item = postInviteSyncQueue.shift();
+      postInviteSyncByAccountId.delete(item.account.id);
+
+      if (item.shouldSyncQuota) {
+        await syncQuotaAfterInvite(item.account);
+      }
+
+      await workspaceSync.syncAccountWorkspaces(item.account).catch(err => {
+        logInviteEvent(item.account.id, 'error', `[workspace-sync-after-invite] ${err.message}`);
+      });
+    }
+  } finally {
+    postInviteSyncRunning = false;
+  }
+}
+
+function schedulePostInviteSync(account, result, requestedWorkspaceId = '') {
+  const shouldSyncQuota = shouldSyncQuotaAfterInvite(account, result, requestedWorkspaceId);
+  const quotaSyncSkippedReason = shouldSyncQuota ? null : getQuotaSyncSkippedReasonAfterInvite(account, result);
+
+  enqueuePostInviteSync(account, shouldSyncQuota);
+
+  return {
+    quotaSyncScheduled: shouldSyncQuota,
+    quotaSyncSkippedReason,
+  };
+}
+
 async function sendInviteWithFallback(primaryAccount, targetEmail, options = {}) {
   const inviter = require('../services/inviter');
   const attempts = [];
@@ -2190,19 +2258,7 @@ router.post('/:id(\\d+)/invite', async (req, res) => {
         releaseWorkspaceSlot(workspaceReservation);
         workspaceReservation = null;
       }
-      const quotaResult = shouldSyncQuotaAfterInvite(usedAccount, finalResult, selectedWorkspaceId)
-        ? await syncQuotaAfterInvite(usedAccount)
-        : null;
-      workspaceSync.syncAccountWorkspaces(usedAccount).catch(err => {
-        logInviteEvent(usedAccount.id, 'error', `[workspace-sync-after-invite] ${err.message}`);
-      });
-      const quotaSyncSkippedReason = quotaResult ? null : (
-        normalizeWorkspaceId(finalResult.workspace_id) &&
-        normalizeWorkspaceId(usedAccount.quota_workspace_id) &&
-        normalizeWorkspaceId(finalResult.workspace_id) !== normalizeWorkspaceId(usedAccount.quota_workspace_id)
-      )
-        ? '当前账号已绑定其他工作区的配额同步，本次指定工作区邀请后未自动刷新名额'
-        : null;
+      const postInviteSync = schedulePostInviteSync(usedAccount, finalResult, selectedWorkspaceId);
 
       logInviteAttempts(finalResult.wasResend ? 'manual-resend' : 'manual-invite', targetEmail, delivery.attempts);
 
@@ -2221,16 +2277,9 @@ router.post('/:id(\\d+)/invite', async (req, res) => {
         workspace_name: finalResult.workspace_name,
         plan_type: finalResult.plan_type,
         is_resend: !!existing || !!finalResult.wasResend || Boolean(forceResend) || fallbackUsed,
-        quota_sync: quotaResult && quotaResult.success ? {
-          total_users: quotaResult.totalUsers,
-          occupied_seats: quotaResult.usedSeats,
-          reserved_seats: quotaResult.reservedSeats,
-          member_seats: quotaResult.memberSeats,
-          pending_invites: quotaResult.pendingInvites,
-          remaining_seats: quotaResult.remainingSeats,
-          projected_remaining_seats: quotaResult.projectedRemainingSeats,
-        } : null,
-        quota_sync_skipped_reason: quotaSyncSkippedReason,
+        quota_sync: null,
+        quota_sync_pending: postInviteSync.quotaSyncScheduled,
+        quota_sync_skipped_reason: postInviteSync.quotaSyncSkippedReason,
       });
     } else {
       logInviteAttempts(Boolean(forceResend) ? 'manual-resend' : 'manual-invite', targetEmail, delivery.attempts);
@@ -2529,19 +2578,7 @@ router.post('/auto-invite', async (req, res) => {
         releaseWorkspaceSlot(workspaceReservation);
         workspaceReservation = null;
       }
-      const quotaResult = shouldSyncQuotaAfterInvite(usedAccount, finalResult, reusableInvite?.workspace_id)
-        ? await syncQuotaAfterInvite(usedAccount)
-        : null;
-      workspaceSync.syncAccountWorkspaces(usedAccount).catch(err => {
-        logInviteEvent(usedAccount.id, 'error', `[workspace-sync-after-invite] ${err.message}`);
-      });
-      const quotaSyncSkippedReason = quotaResult ? null : (
-        normalizeWorkspaceId(finalResult.workspace_id) &&
-        normalizeWorkspaceId(usedAccount.quota_workspace_id) &&
-        normalizeWorkspaceId(finalResult.workspace_id) !== normalizeWorkspaceId(usedAccount.quota_workspace_id)
-      )
-        ? '当前账号已绑定其他工作区的配额同步，本次指定工作区邀请后未自动刷新名额'
-        : null;
+      const postInviteSync = schedulePostInviteSync(usedAccount, finalResult, reusableInvite?.workspace_id);
 
       logInviteAttempts(reusableInvite ? 'auto-resend' : 'auto-invite', targetEmail, delivery.attempts);
 
@@ -2560,16 +2597,9 @@ router.post('/auto-invite', async (req, res) => {
         workspace_name: finalResult.workspace_name,
         plan_type: finalResult.plan_type,
         is_resend: !!existing || !!finalResult.wasResend || !!reusableInvite || fallbackUsed,
-        quota_sync: quotaResult && quotaResult.success ? {
-          total_users: quotaResult.totalUsers,
-          occupied_seats: quotaResult.usedSeats,
-          reserved_seats: quotaResult.reservedSeats,
-          member_seats: quotaResult.memberSeats,
-          pending_invites: quotaResult.pendingInvites,
-          remaining_seats: quotaResult.remainingSeats,
-          projected_remaining_seats: quotaResult.projectedRemainingSeats,
-        } : null,
-        quota_sync_skipped_reason: quotaSyncSkippedReason,
+        quota_sync: null,
+        quota_sync_pending: postInviteSync.quotaSyncScheduled,
+        quota_sync_skipped_reason: postInviteSync.quotaSyncSkippedReason,
       });
     } else {
       logInviteAttempts(reusableInvite ? 'auto-resend' : 'auto-invite', targetEmail, delivery.attempts);

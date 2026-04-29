@@ -5,13 +5,54 @@ const TEAM_INVITE_REQUEST_TIMEOUT_MS = Math.max(
   5000,
   Number(process.env.CDK_TEAM_INVITE_TIMEOUT_MS || 120000)
 );
+const TEAM_WORKER_CONCURRENCY = Math.max(
+  1,
+  Math.min(Number(process.env.CDK_TEAM_WORKER_CONCURRENCY || 1) || 1, 5)
+);
 
 class CdkTeamWorker {
   constructor() {
     this.processing = new Set();
+    this.queued = new Set();
+    this.queue = [];
+    this.activeCount = 0;
+    this.concurrency = TEAM_WORKER_CONCURRENCY;
   }
 
   async processTask(taskId) {
+    const normalizedTaskId = String(taskId || '').trim();
+    if (!normalizedTaskId) {
+      return;
+    }
+
+    if (this.processing.has(normalizedTaskId) || this.queued.has(normalizedTaskId)) {
+      console.log(`[CDK Team Worker] Task ${normalizedTaskId} already queued/processing, skipping`);
+      return;
+    }
+
+    this.queued.add(normalizedTaskId);
+    this.queue.push(normalizedTaskId);
+    this.drainQueue();
+  }
+
+  drainQueue() {
+    while (this.activeCount < this.concurrency && this.queue.length > 0) {
+      const taskId = this.queue.shift();
+      this.queued.delete(taskId);
+      this.activeCount += 1;
+
+      this.runTask(taskId)
+        .catch(err => {
+          console.error(`[CDK Team Worker] Task ${taskId} crashed:`, err.message);
+        })
+        .finally(() => {
+          this.activeCount -= 1;
+          this.drainQueue();
+        });
+    }
+  }
+
+  async runTask(taskId) {
     if (this.processing.has(taskId)) {
       console.log(`[CDK Team Worker] Task ${taskId} already processing, skipping`);
       return;
