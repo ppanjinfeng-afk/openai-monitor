@@ -3,7 +3,7 @@ const fetch = require('node-fetch');
 
 const TEAM_INVITE_REQUEST_TIMEOUT_MS = Math.max(
   5000,
-  Number(process.env.CDK_TEAM_INVITE_TIMEOUT_MS || 120000)
+  Number(process.env.CDK_TEAM_INVITE_TIMEOUT_MS || 300000)
 );
 const TEAM_WORKER_CONCURRENCY = Math.max(
   1,
