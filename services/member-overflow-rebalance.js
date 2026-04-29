@@ -68,11 +68,19 @@ function getOverflowWorkspaces(limit = 20) {
     FROM workspaces w
     JOIN accounts a ON a.id = w.account_id
     WHERE w.sync_status = 'success'
-      AND COALESCE(w.member_count, 0) > ?
+      AND MAX(
+        COALESCE(w.member_count, 0),
+        COALESCE(w.occupied_seats, 0) + COALESCE(w.pending_invites, 0)
+      ) > ?
       AND a.status = 'active'
       AND a.access_token IS NOT NULL
       AND a.access_token != ''
-    ORDER BY (COALESCE(w.member_count, 0) - ?) DESC, datetime(w.updated_at) ASC, w.id ASC
+    ORDER BY (
+      MAX(
+        COALESCE(w.member_count, 0),
+        COALESCE(w.occupied_seats, 0) + COALESCE(w.pending_invites, 0)
+      ) - ?
+    ) DESC, datetime(w.updated_at) ASC, w.id ASC
     LIMIT ?
   `).all(WORKSPACE_MEMBER_LIMIT, WORKSPACE_MEMBER_LIMIT, limit);
 }
@@ -289,12 +297,18 @@ async function syncSourceWorkspaceState(account) {
 }
 
 async function rebalanceWorkspace(workspace) {
-  const overflowCount = Math.max(0, Number(workspace.member_count || 0) - WORKSPACE_MEMBER_LIMIT);
+  const memberCount = Number(workspace.member_count || 0);
+  const reservedSeats = Number(workspace.occupied_seats || 0) + Number(workspace.pending_invites || 0);
+  const memberOverflowCount = Math.max(0, memberCount - WORKSPACE_MEMBER_LIMIT);
+  const reservedOverflowCount = Math.max(0, reservedSeats - WORKSPACE_MEMBER_LIMIT);
+  const overflowCount = Math.max(memberOverflowCount, reservedOverflowCount);
   if (overflowCount <= 0) {
     return {
       workspace_id: workspace.workspace_id,
       account_email: workspace.account_email,
       overflow_count: 0,
+      member_overflow_count: 0,
+      reserved_overflow_count: 0,
       moved: 0,
       skipped: 0,
       failed: 0,
@@ -484,6 +498,8 @@ async function rebalanceWorkspace(workspace) {
     workspace_name: workspace.workspace_name,
     account_email: workspace.account_email,
     overflow_count: overflowCount,
+    member_overflow_count: memberOverflowCount,
+    reserved_overflow_count: reservedOverflowCount,
     moved,
     skipped,
     failed,
