@@ -2,6 +2,8 @@ const express = require('express');
 const db = require('../db');
 const quotaSync = require('../services/quota-sync');
 const workspaceSync = require('../services/workspace-sync');
+const memberOverflowRebalance = require('../services/member-overflow-rebalance');
+const untrackedMemberCleanup = require('../services/untracked-member-cleanup');
 const { listAccountWorkspaces } = require('../services/account-workspaces');
 const { classifyFailure } = require('../services/failure-utils');
 
@@ -23,6 +25,75 @@ const PROJECTED_SEATS_SQL = `
     ELSE MAX(COALESCE(invited_count, 0), ${WORKSPACE_RESERVED_SEATS_SQL})
   END
 `;
+
+function shouldRunPostQuotaMaintenance(results = []) {
+  return (Array.isArray(results) ? results : [results]).some(result =>
+    result?.success && (
+      result.overQuota ||
+      result.projectedOverQuota ||
+      Number(result.projectedRemainingSeats || 0) < 0
+    )
+  );
+}
+
+async function runPostQuotaMaintenance(results = []) {
+  const normalizedResults = Array.isArray(results) ? results : [results];
+  if (!shouldRunPostQuotaMaintenance(normalizedResults)) {
+    return {
+      triggered: false,
+      reason: 'no_overflow_detected',
+    };
+  }
+
+  const accountIds = Array.from(new Set(
+    normalizedResults
+      .filter(result => result?.success && (
+        result.overQuota ||
+        result.projectedOverQuota ||
+        Number(result.projectedRemainingSeats || 0) < 0
+      ))
+      .map(result => Number(result.accountId || 0))
+      .filter(Boolean)
+  ));
+
+  const workspaceResults = [];
+  for (const accountId of accountIds) {
+    const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(accountId);
+    if (!account) {
+      workspaceResults.push({
+        success: false,
+        accountId,
+        message: 'Account not found during post-quota maintenance',
+      });
+      continue;
+    }
+
+    try {
+      workspaceResults.push(await workspaceSync.syncAccountWorkspaces(account));
+    } catch (err) {
+      workspaceResults.push({
+        success: false,
+        accountId,
+        email: account.email,
+        message: err.message,
+      });
+    }
+  }
+
+  const untrackedCleanup = await untrackedMemberCleanup.autoKickUntrackedMembers({ limit: 500 });
+  const rebalance = await memberOverflowRebalance.rebalanceOverflowMembers();
+
+  return {
+    triggered: true,
+    account_ids: accountIds,
+    workspace_sync: {
+      summary: workspaceSync.summarizeWorkspaceSync(workspaceResults),
+      results: workspaceResults,
+    },
+    untracked_cleanup: untrackedCleanup,
+    rebalance,
+  };
+}
 const INVITE_FAILURE_WINDOW_HOURS = 24;
 const INVITE_DEGRADED_THRESHOLD = 1;
 const WORKSPACE_MEMBER_LIMIT = 8;
@@ -1981,10 +2052,12 @@ router.post('/sync-quotas', async (req, res) => {
   try {
     const results = await quotaSync.syncAllAccountUsage();
     const summary = quotaSync.summarizeQuotaResults(results);
+    const post_quota_maintenance = await runPostQuotaMaintenance(results);
 
     res.json({
       message: `Quota sync completed: ${summary.synced} synced, ${summary.failed} failed`,
       ...summary,
+      post_quota_maintenance,
       results,
     });
   } catch (err) {
@@ -2169,7 +2242,11 @@ router.post('/:id(\\d+)/sync-quota', async (req, res) => {
   try {
     const result = await quotaSync.syncSingleAccountUsage(account);
     if (result.success || result.skipped) {
-      return res.json(result);
+      const post_quota_maintenance = await runPostQuotaMaintenance(result);
+      return res.json({
+        ...result,
+        post_quota_maintenance,
+      });
     }
 
     return res.status(500).json({ error: result.message });
