@@ -121,9 +121,6 @@ function startScheduler() {
   setTimeout(async () => {
     console.log('[Scheduler] Running initial full check');
     try {
-      runMemberCleanupCycle('initial-parallel').catch(err => {
-        console.error('[Scheduler] Initial member cleanup failed:', err.message);
-      });
       await runCheckCycle('initial');
     } catch (err) {
       console.error('[Scheduler] Initial full check failed:', err.message);

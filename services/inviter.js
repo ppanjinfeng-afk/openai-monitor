@@ -1,5 +1,6 @@
 let puppeteer;
 let StealthPlugin;
+const { withBrowserTask } = require('./browser-task-queue');
 
 async function getPuppeteer() {
   if (!puppeteer) {
@@ -20,6 +21,7 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
     return { success: false, message: 'Account is not authorized yet' };
   }
 
+  return withBrowserTask(async () => {
   let browser = null;
 
   try {
@@ -625,6 +627,10 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
       await browser.close().catch(() => {});
     }
   }
+  }, {
+    label: `team-invite:${account.email || account.id || 'account'}`,
+    priority: 10,
+  });
 }
 
 module.exports = {
