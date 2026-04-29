@@ -2052,6 +2052,33 @@
       return `${(Number(amountCents || 0) / 100).toFixed(2)} ${currency || 'CNY'}`;
     }
 
+    function parseServerTime(value) {
+      const raw = String(value || '').trim();
+      if (!raw) return null;
+      const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+      const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
+      return new Date(hasTimezone ? normalized : `${normalized}Z`);
+    }
+
+    function formatBeijingTime(value) {
+      const date = parseServerTime(value);
+      if (!date || Number.isNaN(date.getTime())) return value || '';
+      const parts = new Intl.DateTimeFormat('zh-CN', {
+        timeZone: 'Asia/Shanghai',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }).formatToParts(date).reduce((acc, part) => {
+        acc[part.type] = part.value;
+        return acc;
+      }, {});
+      return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
+    }
+
     async function copyText(value) {
       const text = String(value || '');
       if (!text) return false;
@@ -2545,7 +2572,7 @@
             <small>订单号：${escapeHtml(order.orderNo)}</small>
             <small>金额：${escapeHtml(order.amountText)}</small>
             <small>数量：${itemCount} 个 CDK</small>
-            <small>时间：${escapeHtml(order.createdAt || '')}</small>
+            <small>时间：${escapeHtml(formatBeijingTime(order.createdAt))}</small>
             ${cdkLine}
           </div>
         `;
