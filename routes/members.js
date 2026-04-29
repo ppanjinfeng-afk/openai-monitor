@@ -67,6 +67,208 @@ async function syncQuotaSnapshot(account) {
   }
 }
 
+function normalizeBatchMemberItem(item, index) {
+  const accountId = Number(item?.account_id || item?.accountId || 0);
+  const userId = String(item?.user_id || item?.userId || '').trim();
+
+  return {
+    clientIndex: Number.isFinite(Number(item?.client_index ?? item?.clientIndex))
+      ? Number(item.client_index ?? item.clientIndex)
+      : index,
+    accountId,
+    userId,
+    email: String(item?.email || '').trim(),
+    workspaceId: String(item?.workspace_id || item?.workspaceId || '').trim(),
+    workspaceName: String(item?.workspace_name || item?.workspaceName || '').trim(),
+    planType: String(item?.plan_type || item?.planType || '').trim(),
+    workspaceRowId: Number(item?.workspace_row_id || item?.workspaceRowId || 0),
+  };
+}
+
+function getBatchConcurrency(value, fallback, max) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(1, Math.min(Math.floor(parsed), max));
+}
+
+async function runWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  const workerCount = Math.min(Math.max(1, limit), items.length);
+
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(items[index], index);
+    }
+  }));
+
+  return results;
+}
+
+function markMemberRemoved(accountId, userId, workspaceId = '') {
+  if (workspaceId) {
+    db.prepare(`
+      UPDATE workspace_members
+      SET deactivated_time = datetime('now'),
+          last_synced_at = datetime('now')
+      WHERE account_id = ?
+        AND user_id = ?
+        AND workspace_id = ?
+    `).run(accountId, userId, workspaceId);
+    return;
+  }
+
+  db.prepare(`
+    UPDATE workspace_members
+    SET deactivated_time = datetime('now'),
+        last_synced_at = datetime('now')
+    WHERE account_id = ?
+      AND user_id = ?
+  `).run(accountId, userId);
+}
+
+router.post('/batch-remove', async (req, res) => {
+  const rawMembers = Array.isArray(req.body?.members) ? req.body.members : [];
+  const maxItems = 300;
+  const members = rawMembers.slice(0, maxItems).map(normalizeBatchMemberItem);
+  const invalidResults = [];
+  const validMembers = [];
+
+  for (const member of members) {
+    if (!member.accountId || !member.userId) {
+      invalidResults.push({
+        clientIndex: member.clientIndex,
+        userId: member.userId,
+        email: member.email,
+        success: false,
+        message: 'Missing account_id or user_id',
+      });
+    } else {
+      validMembers.push(member);
+    }
+  }
+
+  const workspaceConcurrency = getBatchConcurrency(
+    req.body?.workspace_concurrency || process.env.MEMBER_REMOVAL_WORKSPACE_CONCURRENCY,
+    2,
+    4
+  );
+  const memberConcurrency = getBatchConcurrency(
+    req.body?.member_concurrency || process.env.MEMBER_REMOVAL_MEMBER_CONCURRENCY,
+    4,
+    8
+  );
+
+  const groupsByWorkspace = new Map();
+  for (const member of validMembers) {
+    const groupKey = JSON.stringify([
+      member.accountId,
+      member.workspaceId,
+      member.workspaceName,
+      member.planType,
+    ]);
+    if (!groupsByWorkspace.has(groupKey)) {
+      groupsByWorkspace.set(groupKey, []);
+    }
+    groupsByWorkspace.get(groupKey).push(member);
+  }
+
+  const groups = Array.from(groupsByWorkspace.values());
+  const results = [...invalidResults];
+  const workspaceRows = new Set();
+
+  try {
+    await runWithConcurrency(groups, workspaceConcurrency, async group => {
+      const first = group[0];
+      const account = getAccount(first.accountId);
+
+      if (!account?.access_token) {
+        for (const member of group) {
+          results.push({
+            clientIndex: member.clientIndex,
+            userId: member.userId,
+            email: member.email,
+            accountId: member.accountId,
+            workspaceRowId: member.workspaceRowId,
+            success: false,
+            message: 'Account is not authorized, cannot remove member',
+          });
+        }
+        return;
+      }
+
+      const groupResult = await workspaceMembers.removeMembers(
+        account,
+        group.map(member => ({
+          clientIndex: member.clientIndex,
+          userId: member.userId,
+          email: member.email,
+        })),
+        {
+          workspaceId: first.workspaceId,
+          workspaceName: first.workspaceName || first.workspaceId,
+          planType: first.planType,
+          concurrency: memberConcurrency,
+        }
+      );
+
+      const resultItems = Array.isArray(groupResult.results) && groupResult.results.length > 0
+        ? groupResult.results
+        : group.map(member => ({
+            clientIndex: member.clientIndex,
+            userId: member.userId,
+            email: member.email,
+            success: false,
+            message: groupResult.message || 'Remove member failed',
+          }));
+
+      const memberByIndex = new Map(group.map(member => [member.clientIndex, member]));
+      for (const resultItem of resultItems) {
+        const member = memberByIndex.get(resultItem.clientIndex) || group.find(item => item.userId === resultItem.userId);
+        const normalizedResult = {
+          ...resultItem,
+          accountId: member?.accountId || first.accountId,
+          workspaceRowId: member?.workspaceRowId || 0,
+        };
+
+        if (normalizedResult.success && member) {
+          markMemberRemoved(member.accountId, member.userId, member.workspaceId);
+          if (member.workspaceRowId) {
+            workspaceRows.add(Number(member.workspaceRowId));
+          }
+          logAction(
+            member.accountId,
+            'active',
+            `[member-batch-remove] ${member.email || member.userId} from ${member.workspaceName || member.workspaceId || '-'}`
+          );
+        }
+
+        results.push(normalizedResult);
+      }
+    });
+
+    results.sort((a, b) => Number(a.clientIndex || 0) - Number(b.clientIndex || 0));
+    const removed = results.filter(item => item.success).length;
+    const failed = results.length - removed;
+
+    return res.json({
+      success: failed === 0,
+      removed,
+      failed,
+      results,
+      workspace_row_ids: Array.from(workspaceRows),
+      workspace_concurrency: workspaceConcurrency,
+      member_concurrency: memberConcurrency,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:accountId(\\d+)', async (req, res) => {
   const account = ensureAuthorizedAccount(req.params.accountId, res);
   if (!account) return;

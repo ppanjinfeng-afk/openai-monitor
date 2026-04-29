@@ -148,6 +148,13 @@ const API = {
     });
   },
 
+  removeMembersBatch(members = [], options = {}) {
+    return this.request('/api/members/batch-remove', {
+      method: 'POST',
+      body: JSON.stringify({ members, ...options }),
+    });
+  },
+
   logoutMember(accountId, userId, params = {}) {
     const qs = new URLSearchParams(params).toString();
     return this.request(`/api/members/${accountId}/${encodeURIComponent(userId)}/logout${qs ? `?${qs}` : ''}`, {

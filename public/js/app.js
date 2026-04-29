@@ -3162,22 +3162,33 @@ const App = {
     const workspaceRows = new Set();
 
     try {
-      for (const member of members) {
-        try {
-          await API.removeMember(member.account_id, member.user_id, {
-            workspace_id: member.workspace_id,
-            workspace_name: member.workspace_name || member.workspace_id,
-            plan_type: member.plan_type || '',
-            skip_sync: '1',
-          });
-          if (member.workspace_row_id) {
-            workspaceRows.add(Number(member.workspace_row_id));
-          }
-          successCount += 1;
-        } catch (err) {
-          failed.push(`${member.email || member.user_id}: ${err.message}`);
+      members.forEach(member => {
+        if (member.workspace_row_id) {
+          workspaceRows.add(Number(member.workspace_row_id));
         }
-      }
+      });
+
+      const result = await API.removeMembersBatch(
+        members.map((member, index) => ({
+          client_index: index,
+          account_id: member.account_id,
+          user_id: member.user_id,
+          workspace_id: member.workspace_id,
+          workspace_name: member.workspace_name || member.workspace_id,
+          plan_type: member.plan_type || '',
+          email: member.email || '',
+          workspace_row_id: member.workspace_row_id || 0,
+        })),
+        {
+          workspace_concurrency: 2,
+          member_concurrency: 4,
+        }
+      );
+
+      successCount = Number(result.removed || 0);
+      (Array.isArray(result.results) ? result.results : [])
+        .filter(item => !item.success)
+        .forEach(item => failed.push(`${item.email || item.userId || item.user_id || '-'}: ${item.message || 'Remove failed'}`));
 
       this.untrackedMembersSelection = new Set();
       await this.refreshUntrackedMembersSurfaces(Array.from(workspaceRows));
@@ -3359,22 +3370,33 @@ const App = {
     const workspaceRows = new Set();
 
     try {
-      for (const member of members) {
-        try {
-          await API.removeMember(member.account_id, member.user_id, {
-            workspace_id: member.workspace_id,
-            workspace_name: member.workspace_name || member.workspace_id,
-            plan_type: member.plan_type || '',
-            skip_sync: '1',
-          });
-          if (member.workspace_row_id) {
-            workspaceRows.add(Number(member.workspace_row_id));
-          }
-          successCount += 1;
-        } catch (err) {
-          failed.push(`${member.email || member.user_id}: ${err.message}`);
+      members.forEach(member => {
+        if (member.workspace_row_id) {
+          workspaceRows.add(Number(member.workspace_row_id));
         }
-      }
+      });
+
+      const result = await API.removeMembersBatch(
+        members.map((member, index) => ({
+          client_index: index,
+          account_id: member.account_id,
+          user_id: member.user_id,
+          workspace_id: member.workspace_id,
+          workspace_name: member.workspace_name || member.workspace_id,
+          plan_type: member.plan_type || '',
+          email: member.email || '',
+          workspace_row_id: member.workspace_row_id || 0,
+        })),
+        {
+          workspace_concurrency: 2,
+          member_concurrency: 4,
+        }
+      );
+
+      successCount = Number(result.removed || 0);
+      (Array.isArray(result.results) ? result.results : [])
+        .filter(item => !item.success)
+        .forEach(item => failed.push(`${item.email || item.userId || item.user_id || '-'}: ${item.message || 'Remove failed'}`));
 
       await this.syncMemberCleanupWorkspaces(Array.from(workspaceRows));
       this.memberCleanupSelection = new Set();

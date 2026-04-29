@@ -358,6 +358,91 @@ async function runWorkspaceAction(account, action, params = {}, options = {}) {
       };
     }
 
+    if (action === 'remove-members') {
+      const members = (Array.isArray(params.members) ? params.members : [])
+        .map((item, index) => ({
+          clientIndex: Number.isFinite(Number(item?.clientIndex)) ? Number(item.clientIndex) : index,
+          userId: String(item?.userId || '').trim(),
+          email: String(item?.email || '').trim(),
+        }))
+        .filter(item => item.userId);
+
+      if (members.length === 0) {
+        return {
+          success: false,
+          message: 'No members to remove',
+          workspaceId: workspace.workspaceId,
+          results: [],
+          removed: 0,
+          failed: 0,
+        };
+      }
+
+      const concurrency = Math.max(1, Math.min(Number(params.concurrency || 4) || 4, 8));
+      const results = new Array(members.length);
+      let cursor = 0;
+
+      const removeOne = async member => {
+        try {
+          const response = await fetch(
+            `https://chatgpt.com/backend-api/accounts/${workspace.workspaceId}/users/${member.userId}`,
+            {
+              method: 'DELETE',
+              headers: getHeaders(workspace.workspaceId),
+            }
+          );
+          const parsed = await parseResponse(response);
+
+          if (!response.ok) {
+            return {
+              clientIndex: member.clientIndex,
+              userId: member.userId,
+              email: member.email,
+              success: false,
+              message: `\u79fb\u51fa\u6210\u5458\u5931\u8d25 (HTTP ${response.status}): ${extractErrorMessage(parsed.data, parsed.text, response.status)}`,
+            };
+          }
+
+          return {
+            clientIndex: member.clientIndex,
+            userId: member.userId,
+            email: member.email,
+            success: true,
+            message: 'Member removed',
+          };
+        } catch (err) {
+          return {
+            clientIndex: member.clientIndex,
+            userId: member.userId,
+            email: member.email,
+            success: false,
+            message: err.message || 'Remove member failed',
+          };
+        }
+      };
+
+      const workerCount = Math.min(concurrency, members.length);
+      await Promise.all(Array.from({ length: workerCount }, async () => {
+        while (cursor < members.length) {
+          const current = cursor;
+          cursor += 1;
+          results[current] = await removeOne(members[current]);
+        }
+      }));
+
+      const removed = results.filter(item => item?.success).length;
+      const failed = results.length - removed;
+
+      return {
+        success: failed === 0,
+        message: failed === 0 ? 'Members removed' : 'Some members failed to remove',
+        workspaceId: workspace.workspaceId,
+        results,
+        removed,
+        failed,
+      };
+    }
+
     if (action === 'logout-member') {
       const response = await fetch(
         `https://chatgpt.com/backend-api/accounts/${workspace.workspaceId}/users/${params.userId}/logout_all`,
@@ -487,6 +572,26 @@ async function removeMember(account, userId, options = {}) {
   });
 }
 
+async function removeMembers(account, members = [], options = {}) {
+  const normalizedMembers = (Array.isArray(members) ? members : [])
+    .map((item, index) => ({
+      clientIndex: Number.isFinite(Number(item?.clientIndex)) ? Number(item.clientIndex) : index,
+      userId: String(item?.userId || item?.user_id || '').trim(),
+      email: String(item?.email || '').trim(),
+    }))
+    .filter(item => item.userId);
+
+  return runWorkspaceAction(account, 'remove-members', {
+    members: normalizedMembers,
+    concurrency: options.concurrency,
+  }, {
+    workspaceId: options.workspaceId || '',
+    workspaceName: options.workspaceName || '',
+    planType: options.planType || '',
+    page: options.page,
+  });
+}
+
 async function logoutMember(account, userId, options = {}) {
   return runWorkspaceAction(account, 'logout-member', { userId }, {
     workspaceId: options.workspaceId || '',
@@ -514,6 +619,7 @@ module.exports = {
   getMemberDetail,
   updateMember,
   removeMember,
+  removeMembers,
   logoutMember,
   revokePendingInvite,
 };
