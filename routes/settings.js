@@ -24,6 +24,7 @@ router.put('/', (req, res) => {
     'telegram_bot_token',
     'telegram_chat_id',
     'check_interval_minutes',
+    'member_cleanup_interval_minutes',
     'alerts_enabled',
     'daily_summary_enabled',
     'daily_summary_hour',
@@ -60,6 +61,17 @@ router.put('/', (req, res) => {
           continue;
         }
 
+        if (key === 'member_cleanup_interval_minutes') {
+          const minutes = Number.parseInt(value, 10);
+          if (!Number.isFinite(minutes) || minutes < 1 || minutes > 60) {
+            const err = new Error('Member cleanup interval must be between 1 and 60 minutes');
+            err.statusCode = 400;
+            throw err;
+          }
+          update.run(key, String(minutes));
+          continue;
+        }
+
         update.run(key, String(value));
       }
     }
@@ -72,7 +84,12 @@ router.put('/', (req, res) => {
   }
 
   // Restart scheduler if interval changed
-  if (req.body.check_interval_minutes || req.body.daily_summary_enabled || req.body.daily_summary_hour) {
+  if (
+    req.body.check_interval_minutes ||
+    req.body.member_cleanup_interval_minutes ||
+    req.body.daily_summary_enabled ||
+    req.body.daily_summary_hour
+  ) {
     scheduler.restartScheduler();
   }
 

@@ -10,12 +10,28 @@ const { releaseStaleProcessingCdks } = require('./cdk-processing-timeout');
 const telegram = require('./telegram');
 
 let checkTask = null;
+let memberCleanupTask = null;
 let dailySummaryTask = null;
 let checkCycleRunning = false;
+let memberCleanupRunning = false;
 
 function getInterval() {
   const row = db.prepare(`SELECT value FROM settings WHERE key = ?`).get('check_interval_minutes');
   return parseInt(row?.value || '5', 10);
+}
+
+function normalizeIntervalMinutes(value, fallback = 5) {
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return Math.max(1, Math.min(parsed, 60));
+}
+
+function getMemberCleanupInterval() {
+  const row = db.prepare(`SELECT value FROM settings WHERE key = ?`).get('member_cleanup_interval_minutes');
+  return normalizeIntervalMinutes(row?.value || process.env.MEMBER_CLEANUP_INTERVAL_MINUTES, getInterval());
 }
 
 function getDailySummaryHour() {
@@ -39,10 +55,11 @@ async function runCheckCycle(trigger = 'manual') {
 
   try {
     releaseStaleProcessingCdks({ log: true });
+    runMemberCleanupCycle(`${trigger}-parallel`).catch(err => {
+      console.error(`[Scheduler] member cleanup failed during ${trigger}:`, err.message);
+    });
     await checker.checkAllAccounts();
     await workspaceSync.syncAllWorkspaceSnapshots();
-    await untrackedMemberCleanup.autoKickUntrackedMembers();
-    await staleMemberCleanup.autoKickStaleMembers();
     await memberOverflowRebalance.rebalanceOverflowMembers();
     await quotaSync.syncAllAccountUsage();
     return true;
@@ -51,6 +68,27 @@ async function runCheckCycle(trigger = 'manual') {
     return false;
   } finally {
     checkCycleRunning = false;
+  }
+}
+
+async function runMemberCleanupCycle(trigger = 'manual') {
+  if (memberCleanupRunning) {
+    console.log(`[Scheduler] Skip ${trigger} member cleanup: previous cleanup still running`);
+    return false;
+  }
+
+  memberCleanupRunning = true;
+  console.log(`[Scheduler] Running ${trigger} member cleanup at ${new Date().toISOString()}`);
+
+  try {
+    await untrackedMemberCleanup.autoKickUntrackedMembers();
+    await staleMemberCleanup.autoKickStaleMembers();
+    return true;
+  } catch (err) {
+    console.error(`[Scheduler] ${trigger} member cleanup failed:`, err.message);
+    return false;
+  } finally {
+    memberCleanupRunning = false;
   }
 }
 
@@ -69,9 +107,23 @@ function startScheduler() {
 
   console.log(`[Scheduler] Check task scheduled every ${intervalMinutes} minutes`);
 
+  if (memberCleanupTask) {
+    memberCleanupTask.stop();
+  }
+
+  const memberCleanupIntervalMinutes = getMemberCleanupInterval();
+  memberCleanupTask = cron.schedule(`*/${memberCleanupIntervalMinutes} * * * *`, async () => {
+    await runMemberCleanupCycle('periodic');
+  });
+
+  console.log(`[Scheduler] Member cleanup scheduled every ${memberCleanupIntervalMinutes} minutes`);
+
   setTimeout(async () => {
     console.log('[Scheduler] Running initial full check');
     try {
+      runMemberCleanupCycle('initial-parallel').catch(err => {
+        console.error('[Scheduler] Initial member cleanup failed:', err.message);
+      });
       await runCheckCycle('initial');
     } catch (err) {
       console.error('[Scheduler] Initial full check failed:', err.message);
@@ -108,6 +160,10 @@ function stopScheduler() {
     checkTask.stop();
     checkTask = null;
   }
+  if (memberCleanupTask) {
+    memberCleanupTask.stop();
+    memberCleanupTask = null;
+  }
   if (dailySummaryTask) {
     dailySummaryTask.stop();
     dailySummaryTask = null;
@@ -120,4 +176,5 @@ module.exports = {
   restartScheduler,
   stopScheduler,
   runCheckCycle,
+  runMemberCleanupCycle,
 };
