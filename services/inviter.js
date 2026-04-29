@@ -2,6 +2,50 @@ let puppeteer;
 let StealthPlugin;
 const { withBrowserTask } = require('./browser-task-queue');
 
+const INVITE_BROWSER_REUSE_ENABLED = process.env.CDK_TEAM_REUSE_BROWSER !== 'false';
+const INVITE_BROWSER_IDLE_TTL_MS = Math.max(
+  30000,
+  Number(process.env.CDK_TEAM_BROWSER_IDLE_TTL_MS || 10 * 60 * 1000)
+);
+const INVITE_BROWSER_MAX_AGE_MS = Math.max(
+  INVITE_BROWSER_IDLE_TTL_MS,
+  Number(process.env.CDK_TEAM_BROWSER_MAX_AGE_MS || 30 * 60 * 1000)
+);
+const INVITE_PAGE_BOOT_TIMEOUT_MS = Math.max(
+  5000,
+  Number(process.env.CDK_TEAM_PAGE_BOOT_TIMEOUT_MS || 20000)
+);
+const INVITE_PAGE_READY_DELAY_MS = Math.max(
+  0,
+  Number(process.env.CDK_TEAM_PAGE_READY_DELAY_MS || 500)
+);
+const USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
+const BROWSER_ARGS = [
+  '--no-sandbox',
+  '--disable-setuid-sandbox',
+  '--disable-blink-features=AutomationControlled',
+  '--disable-dev-shm-usage',
+  '--disable-background-networking',
+  '--disable-background-timer-throttling',
+  '--disable-backgrounding-occluded-windows',
+  '--disable-renderer-backgrounding',
+  '--disable-extensions',
+  '--disable-features=Translate,BackForwardCache,AcceptCHFrame,MediaRouter,OptimizationHints',
+  '--mute-audio',
+  '--no-first-run',
+  '--no-default-browser-check',
+  '--window-size=1280,800',
+];
+const DEFAULT_VIEWPORT = { width: 1280, height: 800 };
+
+let sharedInviteBrowser = null;
+let sharedInviteBrowserStartedAt = 0;
+let sharedInviteBrowserLaunchPromise = null;
+let sharedInviteBrowserIdleTimer = null;
+let sharedInviteBrowserUseCount = 0;
+
 async function getPuppeteer() {
   if (!puppeteer) {
     puppeteer = require('puppeteer-extra');
@@ -9,6 +53,160 @@ async function getPuppeteer() {
     puppeteer.use(StealthPlugin());
   }
   return puppeteer;
+}
+
+function isBrowserConnected(browser) {
+  return Boolean(browser && (typeof browser.isConnected !== 'function' || browser.isConnected()));
+}
+
+function scheduleSharedInviteBrowserClose() {
+  if (!INVITE_BROWSER_REUSE_ENABLED || !sharedInviteBrowser || sharedInviteBrowserUseCount > 0) {
+    return;
+  }
+
+  clearTimeout(sharedInviteBrowserIdleTimer);
+  sharedInviteBrowserIdleTimer = setTimeout(async () => {
+    const browser = sharedInviteBrowser;
+    sharedInviteBrowser = null;
+    sharedInviteBrowserStartedAt = 0;
+    await browser?.close?.().catch(() => {});
+    console.log('[Inviter] Closed idle shared browser');
+  }, INVITE_BROWSER_IDLE_TTL_MS);
+
+  if (typeof sharedInviteBrowserIdleTimer.unref === 'function') {
+    sharedInviteBrowserIdleTimer.unref();
+  }
+}
+
+function acquireSharedInviteBrowser() {
+  sharedInviteBrowserUseCount += 1;
+  clearTimeout(sharedInviteBrowserIdleTimer);
+}
+
+async function releaseSharedInviteBrowser() {
+  sharedInviteBrowserUseCount = Math.max(0, sharedInviteBrowserUseCount - 1);
+  if (sharedInviteBrowserUseCount > 0) {
+    return;
+  }
+
+  const browserAge = sharedInviteBrowserStartedAt ? Date.now() - sharedInviteBrowserStartedAt : 0;
+  if (browserAge > INVITE_BROWSER_MAX_AGE_MS) {
+    await closeStaleSharedInviteBrowser();
+    return;
+  }
+
+  scheduleSharedInviteBrowserClose();
+}
+
+async function closeStaleSharedInviteBrowser() {
+  clearTimeout(sharedInviteBrowserIdleTimer);
+  const browser = sharedInviteBrowser;
+  sharedInviteBrowser = null;
+  sharedInviteBrowserStartedAt = 0;
+  sharedInviteBrowserUseCount = 0;
+  await browser?.close?.().catch(() => {});
+}
+
+async function launchInviteBrowser(pptr) {
+  const browser = await pptr.launch({
+    headless: 'new',
+    args: BROWSER_ARGS,
+    defaultViewport: DEFAULT_VIEWPORT,
+  });
+
+  browser.on?.('disconnected', () => {
+    if (sharedInviteBrowser === browser) {
+      sharedInviteBrowser = null;
+      sharedInviteBrowserStartedAt = 0;
+      clearTimeout(sharedInviteBrowserIdleTimer);
+    }
+  });
+
+  return browser;
+}
+
+async function getInviteBrowser(pptr) {
+  if (!INVITE_BROWSER_REUSE_ENABLED) {
+    return { browser: await launchInviteBrowser(pptr), shared: false };
+  }
+
+  const now = Date.now();
+  const browserTooOld = sharedInviteBrowserStartedAt
+    && now - sharedInviteBrowserStartedAt > INVITE_BROWSER_MAX_AGE_MS;
+
+  if (isBrowserConnected(sharedInviteBrowser) && (!browserTooOld || sharedInviteBrowserUseCount > 0)) {
+    clearTimeout(sharedInviteBrowserIdleTimer);
+    return { browser: sharedInviteBrowser, shared: true };
+  }
+
+  if (sharedInviteBrowserLaunchPromise) {
+    const browser = await sharedInviteBrowserLaunchPromise;
+    return { browser, shared: true };
+  }
+
+  sharedInviteBrowserLaunchPromise = (async () => {
+    await closeStaleSharedInviteBrowser();
+    const browser = await launchInviteBrowser(pptr);
+    sharedInviteBrowser = browser;
+    sharedInviteBrowserStartedAt = Date.now();
+    console.log('[Inviter] Launched shared browser for Team invites');
+    return browser;
+  })();
+
+  try {
+    const browser = await sharedInviteBrowserLaunchPromise;
+    return { browser, shared: true };
+  } finally {
+    sharedInviteBrowserLaunchPromise = null;
+  }
+}
+
+async function createInvitePage(browser) {
+  let context = null;
+  let page = null;
+
+  try {
+    if (typeof browser.createBrowserContext === 'function') {
+      context = await browser.createBrowserContext();
+    } else if (typeof browser.createIncognitoBrowserContext === 'function') {
+      context = await browser.createIncognitoBrowserContext();
+    }
+
+    page = context ? await context.newPage() : await browser.newPage();
+    await page.setUserAgent(USER_AGENT);
+    await page.setDefaultNavigationTimeout(INVITE_PAGE_BOOT_TIMEOUT_MS);
+    await page.setDefaultTimeout(INVITE_PAGE_BOOT_TIMEOUT_MS);
+    await page.setCacheEnabled(true).catch(() => {});
+    await page.setRequestInterception(true);
+    page.on('request', request => {
+      const resourceType = request.resourceType();
+      if (['image', 'media', 'font', 'stylesheet'].includes(resourceType)) {
+        request.abort().catch(() => {});
+        return;
+      }
+      request.continue().catch(() => {});
+    });
+
+    return { context, page };
+  } catch (err) {
+    if (context) {
+      await context.close().catch(() => {});
+    } else if (page) {
+      await page.close().catch(() => {});
+    }
+    throw err;
+  }
+}
+
+async function primeInvitePage(page) {
+  await page.goto('https://chatgpt.com/', {
+    waitUntil: 'domcontentloaded',
+    timeout: INVITE_PAGE_BOOT_TIMEOUT_MS,
+  });
+
+  if (INVITE_PAGE_READY_DELAY_MS > 0) {
+    await new Promise(resolve => setTimeout(resolve, INVITE_PAGE_READY_DELAY_MS));
+  }
 }
 
 async function sendTeamInvite(account, targetEmail, options = {}) {
@@ -23,31 +221,24 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
 
   return withBrowserTask(async () => {
   let browser = null;
+  let browserIsShared = false;
+  let context = null;
+  let page = null;
 
   try {
     const pptr = await getPuppeteer();
-    browser = await pptr.launch({
-      headless: 'new',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-blink-features=AutomationControlled',
-        '--window-size=1280,800',
-      ],
-      defaultViewport: { width: 1280, height: 800 },
-    });
+    const browserHandle = await getInviteBrowser(pptr);
+    browser = browserHandle.browser;
+    browserIsShared = browserHandle.shared;
+    if (browserIsShared) {
+      acquireSharedInviteBrowser();
+    }
+    const pageHandle = await createInvitePage(browser);
+    context = pageHandle.context;
+    page = pageHandle.page;
 
-    const page = await browser.newPage();
-    await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-    );
-
-    console.log(`[Inviter] Opening chatgpt.com for ${account.email}...`);
-    await page.goto('https://chatgpt.com/', {
-      waitUntil: 'networkidle2',
-      timeout: 30000,
-    });
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    console.log(`[Inviter] Opening chatgpt.com for ${account.email}${browserIsShared ? ' (shared browser)' : ''}...`);
+    await primeInvitePage(page);
 
     const result = await page.evaluate(async ({ accessToken, emailToInvite, forceResend, selectedWorkspaceId, selectedWorkspaceName, maxReservedSeats }) => {
       const DUPLICATE_HINTS = [
@@ -623,8 +814,16 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
     console.error(`[Inviter] Error sending invite to ${trimmedEmail}:`, err);
     return { success: false, message: `Browser script failed: ${err.message}` };
   } finally {
-    if (browser) {
+    if (context) {
+      await context.close().catch(() => {});
+    } else if (page) {
+      await page.close().catch(() => {});
+    }
+
+    if (browser && !browserIsShared) {
       await browser.close().catch(() => {});
+    } else if (browserIsShared) {
+      await releaseSharedInviteBrowser();
     }
   }
   }, {
