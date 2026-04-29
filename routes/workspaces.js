@@ -62,6 +62,41 @@ function toShanghaiDateKey(value) {
   });
 }
 
+const MEMBER_CLEANUP_AGE_FILTERS = {
+  last_72h: { hours: 72, direction: 'within' },
+  over_24h: { hours: 24, direction: 'over' },
+  over_48h: { hours: 48, direction: 'over' },
+  over_72h: { hours: 72, direction: 'over' },
+};
+
+function normalizeMemberCleanupAgeFilter(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(MEMBER_CLEANUP_AGE_FILTERS, normalized) ? normalized : '';
+}
+
+function getMemberCleanupTimeValue(item) {
+  return item?.item_type === 'member' ? item.joined_at : item.invited_at;
+}
+
+function passesMemberCleanupAgeFilter(item, ageFilter, nowMs = Date.now()) {
+  const rule = MEMBER_CLEANUP_AGE_FILTERS[ageFilter];
+  if (!rule) {
+    return true;
+  }
+
+  const time = parseDateValue(getMemberCleanupTimeValue(item));
+  if (!time) {
+    return false;
+  }
+
+  const ageHours = (nowMs - time.getTime()) / (60 * 60 * 1000);
+  if (rule.direction === 'within') {
+    return ageHours >= 0 && ageHours <= rule.hours;
+  }
+
+  return ageHours >= rule.hours;
+}
+
 function normalizeSortField(sort) {
   const value = String(sort || 'health').trim().toLowerCase();
   if (['health', 'remaining', 'members', 'updated', 'name'].includes(value)) {
@@ -506,6 +541,7 @@ router.get('/member-cleanup', (req, res) => {
   const search = String(req.query.search || '').trim().toLowerCase();
   const itemTypeRaw = String(req.query.item_type || 'all').trim().toLowerCase();
   const itemType = ['all', 'member', 'pending'].includes(itemTypeRaw) ? itemTypeRaw : 'all';
+  const ageFilter = normalizeMemberCleanupAgeFilter(req.query.age_filter || req.query.ageFilter);
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || '').trim())
     ? String(req.query.date || '').trim()
     : '';
@@ -589,14 +625,19 @@ router.get('/member-cleanup', (req, res) => {
 
   if (date) {
     items = items.filter(item => {
-      const timeValue = item.item_type === 'member' ? item.joined_at : item.invited_at;
+      const timeValue = getMemberCleanupTimeValue(item);
       return toShanghaiDateKey(timeValue) === date;
     });
   }
 
+  if (ageFilter) {
+    const nowMs = Date.now();
+    items = items.filter(item => passesMemberCleanupAgeFilter(item, ageFilter, nowMs));
+  }
+
   items.sort((left, right) => {
-    const leftTime = parseDateValue(left.item_type === 'member' ? left.joined_at : left.invited_at)?.getTime() || 0;
-    const rightTime = parseDateValue(right.item_type === 'member' ? right.joined_at : right.invited_at)?.getTime() || 0;
+    const leftTime = parseDateValue(getMemberCleanupTimeValue(left))?.getTime() || 0;
+    const rightTime = parseDateValue(getMemberCleanupTimeValue(right))?.getTime() || 0;
     if (rightTime !== leftTime) {
       return rightTime - leftTime;
     }
@@ -614,6 +655,7 @@ router.get('/member-cleanup', (req, res) => {
       search,
       item_type: itemType,
       date,
+      age_filter: ageFilter,
     },
     summary: {
       total: items.length,

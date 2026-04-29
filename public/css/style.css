@@ -3304,6 +3304,10 @@ body::after {
   min-width: 150px;
 }
 
+.member-cleanup-age-input {
+  min-width: 150px;
+}
+
 .member-cleanup-selection-bar {
   display: flex;
   align-items: center;

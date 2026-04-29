@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=20260427-untracked-kick">
+  <link rel="stylesheet" href="/css/style.css?v=20260429-member-age">
 </head>
 <body>
   <div id="app">
@@ -755,6 +755,15 @@
                       <div class="filter-group">
                         <input type="date" id="member-cleanup-date-filter" class="form-input member-cleanup-date-input">
                       </div>
+                      <div class="filter-group">
+                        <select id="member-cleanup-age-filter" class="select-input member-cleanup-age-input">
+                          <option value="">全部时长</option>
+                          <option value="last_72h">最近 72 小时</option>
+                          <option value="over_24h">超过 24 小时</option>
+                          <option value="over_48h">超过 48 小时</option>
+                          <option value="over_72h">超过 72 小时</option>
+                        </select>
+                      </div>
                       <button class="btn btn-ghost" id="btn-reset-member-cleanup">
                         <span>重置筛选</span>
                       </button>
@@ -1393,9 +1402,9 @@
   <!-- Toast Container -->
   <div class="toast-container" id="toast-container"></div>
 
-  <script src="/js/api.js?v=20260427-untracked-kick"></script>
-  <script src="/js/components.js?v=20260427-untracked-kick"></script>
-  <script src="/js/app.js?v=20260427-untracked-kick"></script>
+  <script src="/js/api.js?v=20260429-member-age"></script>
+  <script src="/js/components.js?v=20260429-member-age"></script>
+  <script src="/js/app.js?v=20260429-member-age"></script>
 </body>
 </html>
 

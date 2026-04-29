@@ -2598,6 +2598,7 @@ const App = {
       search: document.getElementById('member-cleanup-search-input')?.value.trim() || '',
       item_type: document.getElementById('member-cleanup-type-filter')?.value || 'all',
       date: document.getElementById('member-cleanup-date-filter')?.value || '',
+      age_filter: document.getElementById('member-cleanup-age-filter')?.value || '',
     };
   },
 
@@ -4389,15 +4390,25 @@ const App = {
       });
     }
 
+    const memberCleanupAgeFilter = document.getElementById('member-cleanup-age-filter');
+    if (memberCleanupAgeFilter) {
+      memberCleanupAgeFilter.addEventListener('change', () => {
+        this.memberCleanupSelection = new Set();
+        this.loadMemberCleanup();
+      });
+    }
+
     const btnResetMemberCleanup = document.getElementById('btn-reset-member-cleanup');
     if (btnResetMemberCleanup) {
       btnResetMemberCleanup.addEventListener('click', () => {
         const searchInput = document.getElementById('member-cleanup-search-input');
         const typeFilter = document.getElementById('member-cleanup-type-filter');
         const dateFilter = document.getElementById('member-cleanup-date-filter');
+        const ageFilter = document.getElementById('member-cleanup-age-filter');
         if (searchInput) searchInput.value = '';
         if (typeFilter) typeFilter.value = 'all';
         if (dateFilter) dateFilter.value = '';
+        if (ageFilter) ageFilter.value = '';
         this.memberCleanupSelection = new Set();
         this.loadMemberCleanup();
       });
