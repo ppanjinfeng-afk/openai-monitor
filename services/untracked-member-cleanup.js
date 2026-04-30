@@ -140,71 +140,63 @@ function buildUntrackedMemberQuery({ search = '' } = {}) {
         AND a.access_token != ''
         AND COALESCE(wp.email, '') != ''
     ),
-    member_locations AS (
-      SELECT
-        email_key,
-        COUNT(DISTINCT (account_id || ':' || workspace_id)) AS location_count
-      FROM untracked_items
-      GROUP BY email_key
+    canonical_cdk_tasks AS (
+      SELECT t.*
+      FROM cdk_tasks t
+      WHERE t.task_type = 'team_invite'
+        AND t.status = 'SUCCESS'
+        AND (t.cdk_id IS NOT NULL OR COALESCE(TRIM(t.cdk_code), '') != '')
+        AND NOT EXISTS (
+          SELECT 1
+          FROM cdk_tasks earlier
+          WHERE earlier.task_type = 'team_invite'
+            AND earlier.status = 'SUCCESS'
+            AND (
+              (t.cdk_id IS NOT NULL AND earlier.cdk_id = t.cdk_id)
+              OR (
+                t.cdk_id IS NULL
+                AND earlier.cdk_id IS NULL
+                AND TRIM(earlier.cdk_code) = TRIM(t.cdk_code)
+              )
+            )
+            AND (
+              datetime(COALESCE(NULLIF(earlier.completed_at, ''), earlier.updated_at, earlier.created_at))
+                < datetime(COALESCE(NULLIF(t.completed_at, ''), t.updated_at, t.created_at))
+              OR (
+                datetime(COALESCE(NULLIF(earlier.completed_at, ''), earlier.updated_at, earlier.created_at))
+                  = datetime(COALESCE(NULLIF(t.completed_at, ''), t.updated_at, t.created_at))
+                AND datetime(earlier.created_at) < datetime(t.created_at)
+              )
+              OR (
+                datetime(COALESCE(NULLIF(earlier.completed_at, ''), earlier.updated_at, earlier.created_at))
+                  = datetime(COALESCE(NULLIF(t.completed_at, ''), t.updated_at, t.created_at))
+                AND datetime(earlier.created_at) = datetime(t.created_at)
+                AND earlier.id < t.id
+              )
+            )
+        )
     ),
-    known_exact_sources AS (
-      SELECT DISTINCT
-        LOWER(TRIM(target_email)) AS email_key,
-        workspace_id AS workspace_key
-      FROM invites
-      WHERE COALESCE(target_email, '') != ''
-        AND COALESCE(workspace_id, '') != ''
-        AND COALESCE(status, '') != 'error'
-        AND COALESCE(failure_category, '') = ''
-      UNION
+    known_cdk_sources AS (
       SELECT DISTINCT
         LOWER(TRIM(i.target_email)) AS email_key,
         i.workspace_id AS workspace_key
       FROM invites i
-      JOIN cdk_tasks t ON t.id = i.cdk_task_id
+      JOIN canonical_cdk_tasks t ON t.id = i.cdk_task_id
       WHERE COALESCE(i.target_email, '') != ''
+        AND COALESCE(t.account_email, '') != ''
+        AND LOWER(TRIM(i.target_email)) = LOWER(TRIM(t.account_email))
         AND COALESCE(i.workspace_id, '') != ''
-        AND COALESCE(i.status, '') != 'error'
+        AND COALESCE(i.status, '') IN ('sent', 'accepted')
         AND COALESCE(i.failure_category, '') = ''
-        AND t.task_type = 'team_invite'
-        AND t.status = 'SUCCESS'
-    ),
-    known_global_sources AS (
-      SELECT DISTINCT LOWER(TRIM(assigned_email)) AS email_key
-      FROM cdk_cards
-      WHERE COALESCE(assigned_email, '') != ''
-      UNION
-      SELECT DISTINCT LOWER(TRIM(buyer_email)) AS email_key
-      FROM cdk_cards
-      WHERE COALESCE(buyer_email, '') != ''
-      UNION
-      SELECT DISTINCT LOWER(TRIM(target_email)) AS email_key
-      FROM cdk_order_items
-      WHERE COALESCE(target_email, '') != ''
-      UNION
-      SELECT DISTINCT LOWER(TRIM(account_email)) AS email_key
-      FROM cdk_tasks
-      WHERE COALESCE(account_email, '') != ''
-        AND status = 'SUCCESS'
-      UNION
-      SELECT DISTINCT LOWER(TRIM(target_email)) AS email_key
-      FROM invites
-      WHERE COALESCE(target_email, '') != ''
-        AND COALESCE(status, '') != 'error'
-        AND COALESCE(failure_category, '') = ''
-        AND COALESCE(workspace_id, '') = ''
     )
   `;
 
   const fromSql = `
     FROM untracked_items m
-    LEFT JOIN member_locations ml ON ml.email_key = m.email_key
-    LEFT JOIN known_exact_sources es
-      ON es.email_key = m.email_key
-      AND es.workspace_key = m.workspace_id
-    LEFT JOIN known_global_sources gs ON gs.email_key = m.email_key
-    WHERE es.email_key IS NULL
-      AND (COALESCE(ml.location_count, 0) > 1 OR gs.email_key IS NULL)
+    LEFT JOIN known_cdk_sources cs
+      ON cs.email_key = m.email_key
+      AND cs.workspace_key = m.workspace_id
+    WHERE cs.email_key IS NULL
       ${searchWhere}
   `;
 
@@ -219,8 +211,8 @@ function getUntrackedMembers(filters = {}) {
     SELECT
       m.*,
       CASE
-        WHEN m.item_type = 'pending' THEN '没有匹配到 CDK、订单、激活任务或平台邀请记录；待邀请应撤销'
-        ELSE '没有匹配到 CDK、订单、激活任务或平台邀请记录；成员应移出'
+        WHEN m.item_type = 'pending' THEN '没有匹配到有效 CDK 激活来源；待邀请应撤销'
+        ELSE '没有匹配到有效 CDK 激活来源；成员应移出'
       END AS source_message
     ${fromSql}
     ORDER BY
