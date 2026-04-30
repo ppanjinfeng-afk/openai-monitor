@@ -10,6 +10,7 @@ const {
 } = require('../services/team-stock');
 const { refreshInventoryInBackground } = require('../services/inventory-sync');
 const { releaseStaleProcessingCdks } = require('../services/cdk-processing-timeout');
+const { reconcileCdkTeamTaskSuccess } = require('../services/cdk-team-task-sync');
 
 const router = express.Router();
 
@@ -39,6 +40,65 @@ function generatePublicToken() {
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
+}
+
+function normalizeTaskStatus(status) {
+  return String(status || '').trim().toUpperCase();
+}
+
+function makeHttpError(message, statusCode = 400) {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  return err;
+}
+
+function getLatestTeamTaskForCard(cardId) {
+  return db.prepare(`
+    SELECT *
+    FROM cdk_tasks
+    WHERE cdk_id = ?
+      AND task_type = 'team_invite'
+    ORDER BY datetime(COALESCE(NULLIF(updated_at, ''), created_at)) DESC
+    LIMIT 1
+  `).get(cardId);
+}
+
+function getSuccessfulTeamTaskForCard(cardId) {
+  return db.prepare(`
+    SELECT *
+    FROM cdk_tasks
+    WHERE cdk_id = ?
+      AND task_type = 'team_invite'
+      AND status = 'SUCCESS'
+    ORDER BY datetime(COALESCE(NULLIF(completed_at, ''), updated_at, created_at)) DESC
+    LIMIT 1
+  `).get(cardId);
+}
+
+function getActiveTeamTaskForCard(cardId) {
+  return db.prepare(`
+    SELECT *
+    FROM cdk_tasks
+    WHERE cdk_id = ?
+      AND task_type = 'team_invite'
+      AND UPPER(status) IN ('PENDING', 'PROCESSING')
+    ORDER BY datetime(COALESCE(NULLIF(updated_at, ''), created_at)) DESC
+    LIMIT 1
+  `).get(cardId);
+}
+
+function markCardUsedFromTask(task) {
+  if (!task?.cdk_id) {
+    return;
+  }
+  db.prepare(`
+    UPDATE cdk_cards
+    SET status = 'used',
+        assigned_email = COALESCE(NULLIF(assigned_email, ''), ?),
+        used_at = COALESCE(used_at, datetime('now')),
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(task.account_email || '', task.cdk_id);
 }
 
 function isValidEmail(email) {
@@ -126,6 +186,18 @@ function createTeamInviteTask(cardCodeInput, emailInput) {
     throw err;
   }
 
+  const preflightCard = db.prepare('SELECT * FROM cdk_cards WHERE code = ?').get(cardCode);
+  if (preflightCard) {
+    const latestTask = getLatestTeamTaskForCard(preflightCard.id);
+    if (latestTask && normalizeTaskStatus(latestTask.status) === 'FAILED') {
+      try {
+        reconcileCdkTeamTaskSuccess(latestTask.id, { source: 'submit_preflight_reconcile' });
+      } catch (err) {
+        console.error(`[CDK Route] Failed to reconcile task ${latestTask.id} before submit:`, err.message);
+      }
+    }
+  }
+
   const taskId = generateTaskId();
   const taskToken = generatePublicToken();
 
@@ -137,10 +209,50 @@ function createTeamInviteTask(cardCodeInput, emailInput) {
       throw err;
     }
 
+    const successfulTask = getSuccessfulTeamTaskForCard(card.id);
+    if (successfulTask || card.status === 'used') {
+      if (successfulTask) {
+        markCardUsedFromTask(successfulTask);
+      }
+      throw makeHttpError('CDK 已使用', 400);
+    }
+
+    const activeTask = getActiveTeamTaskForCard(card.id);
+    if (activeTask) {
+      const activeEmail = normalizeEmail(activeTask.account_email);
+      if (activeEmail && activeEmail !== email) {
+        throw makeHttpError('CDK 正在处理中，请稍后再试', 409);
+      }
+
+      const existingToken = activeTask.task_token || taskToken;
+      if (!activeTask.task_token) {
+        db.prepare(`
+          UPDATE cdk_tasks
+          SET task_token = ?,
+              updated_at = datetime('now')
+          WHERE id = ?
+        `).run(existingToken, activeTask.id);
+      }
+
+      db.prepare(`
+        UPDATE cdk_cards
+        SET status = 'processing',
+            assigned_email = ?,
+            updated_at = datetime('now')
+        WHERE id = ?
+      `).run(activeTask.account_email || email, card.id);
+
+      return {
+        taskId: activeTask.id,
+        taskToken: existingToken,
+        cardCode,
+        email: activeTask.account_email || email,
+        reused: true,
+      };
+    }
+
     if (card.status !== 'unused') {
-      const err = new Error(card.status === 'used' ? 'CDK 已使用' : 'CDK 当前不可用');
-      err.statusCode = 400;
-      throw err;
+      throw makeHttpError(card.status === 'used' ? 'CDK 已使用' : 'CDK 当前不可用', 400);
     }
 
     const planType = String(card.plan_type || '').toLowerCase();
@@ -188,9 +300,11 @@ function createTeamInviteTask(cardCodeInput, emailInput) {
 
   const created = createTask();
 
-  cdkTeamWorker.processTask(taskId).catch(err => {
-    console.error('[CDK Route] Team background task error:', err.message);
-  });
+  if (!created.reused) {
+    cdkTeamWorker.processTask(created.taskId).catch(err => {
+      console.error('[CDK Route] Team background task error:', err.message);
+    });
+  }
 
   return created;
 }

@@ -22,6 +22,13 @@ function releaseStaleProcessingCdks(options = {}) {
           updated_at = datetime('now')
       WHERE status IN ('pending', 'PROCESSING', 'processing')
         AND updated_at < datetime('now', ?)
+        AND NOT EXISTS (
+          SELECT 1
+          FROM cdk_tasks success_task
+          WHERE success_task.cdk_id = cdk_tasks.cdk_id
+            AND success_task.task_type = 'team_invite'
+            AND success_task.status = 'SUCCESS'
+        )
     `).run(timeoutMessage, cutoffModifier);
 
     const cardResult = db.prepare(`
@@ -31,6 +38,13 @@ function releaseStaleProcessingCdks(options = {}) {
           updated_at = datetime('now')
       WHERE status = 'processing'
         AND updated_at < datetime('now', ?)
+        AND NOT EXISTS (
+          SELECT 1
+          FROM cdk_tasks success_task
+          WHERE success_task.cdk_id = cdk_cards.id
+            AND success_task.task_type = 'team_invite'
+            AND success_task.status = 'SUCCESS'
+        )
     `).run(cutoffModifier);
 
     return {
@@ -66,12 +80,20 @@ function reconcileSuccessfulTeamInvites() {
   `).all();
 
   let reconciled = 0;
+  const reconciledCardIds = new Set();
   for (const task of tasks) {
+    if (task.cdk_id && reconciledCardIds.has(task.cdk_id)) {
+      continue;
+    }
+
     const result = reconcileCdkTeamTaskSuccess(task.id, {
       source: 'processing_timeout_reconcile',
     });
     if (result.reconciled) {
       reconciled += 1;
+      if (task.cdk_id) {
+        reconciledCardIds.add(task.cdk_id);
+      }
     }
   }
 

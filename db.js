@@ -220,6 +220,7 @@ ensureColumn('invites', 'workspace_name', "workspace_name TEXT DEFAULT ''");
 ensureColumn('invites', 'remote_state', "remote_state TEXT DEFAULT ''");
 ensureColumn('invites', 'remote_last_seen_at', 'remote_last_seen_at TEXT');
 ensureColumn('invites', 'failure_category', "failure_category TEXT DEFAULT ''");
+ensureColumn('invites', 'cdk_task_id', "cdk_task_id TEXT DEFAULT ''");
 ensureColumn('accounts', 'quota_sync_status', "quota_sync_status TEXT DEFAULT 'never'");
 ensureColumn('accounts', 'quota_sync_message', "quota_sync_message TEXT DEFAULT ''");
 ensureColumn('accounts', 'quota_last_synced_at', 'quota_last_synced_at TEXT');
@@ -280,6 +281,7 @@ db.prepare(`
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_invites_target_email ON invites(target_email);
   CREATE INDEX IF NOT EXISTS idx_invites_workspace_email ON invites(workspace_id, target_email);
+  CREATE INDEX IF NOT EXISTS idx_invites_cdk_task_id ON invites(cdk_task_id);
   CREATE INDEX IF NOT EXISTS idx_workspaces_account ON workspaces(account_id);
   CREATE INDEX IF NOT EXISTS idx_workspaces_workspace_id ON workspaces(workspace_id);
   CREATE INDEX IF NOT EXISTS idx_workspace_members_email ON workspace_members(email);

@@ -1594,6 +1594,7 @@ function persistInviteSuccess(account, targetEmail, result) {
   const remoteInviteId = result.remote_invite_id || '';
   const deliveryType = result.delivery_type || (result.wasResend ? 'resend' : 'send');
   const failureCategory = result.failure_category || '';
+  const cdkTaskId = String(result.cdk_task_id || result.cdkTaskId || '').trim();
 
   if (!existing) {
     db.prepare(`UPDATE accounts SET updated_at = datetime('now') WHERE id = ?`).run(account.id);
@@ -1610,9 +1611,10 @@ function persistInviteSuccess(account, targetEmail, result) {
         delivery_type,
         workspace_id,
         workspace_name,
-        failure_category
-      ) VALUES (?, ?, ?, ?, 'sent', ?, ?, ?, ?, ?, ?)
-    `).run(account.id, requestedAccountId, fallbackFromAccountId, targetEmail, result.message, remoteInviteId, deliveryType, workspaceId, workspaceName, failureCategory);
+        failure_category,
+        cdk_task_id
+      ) VALUES (?, ?, ?, ?, 'sent', ?, ?, ?, ?, ?, ?, ?)
+    `).run(account.id, requestedAccountId, fallbackFromAccountId, targetEmail, result.message, remoteInviteId, deliveryType, workspaceId, workspaceName, failureCategory, cdkTaskId);
   } else {
     db.prepare(`
       UPDATE invites
@@ -1625,9 +1627,10 @@ function persistInviteSuccess(account, targetEmail, result) {
           delivery_type = ?,
           workspace_id = ?,
           workspace_name = ?,
-          failure_category = ?
+          failure_category = ?,
+          cdk_task_id = CASE WHEN ? != '' THEN ? ELSE cdk_task_id END
       WHERE id = ?
-    `).run(result.message, requestedAccountId, fallbackFromAccountId, remoteInviteId, deliveryType, workspaceId, workspaceName, failureCategory, existing.id);
+    `).run(result.message, requestedAccountId, fallbackFromAccountId, remoteInviteId, deliveryType, workspaceId, workspaceName, failureCategory, cdkTaskId, cdkTaskId, existing.id);
     db.prepare(`UPDATE accounts SET updated_at = datetime('now') WHERE id = ?`).run(account.id);
   }
 
@@ -2532,8 +2535,10 @@ router.post('/:id(\\d+)/invite', async (req, res) => {
 
     if (result.success) {
       const fallbackUsed = usedAccount.id !== account.id;
+      const cdkTaskId = String(req.body.cdk_task_id || req.body.cdkTaskId || '').trim();
       const finalResult = {
         ...result,
+        cdk_task_id: cdkTaskId || result.cdk_task_id || result.cdkTaskId || '',
         requested_account_id: account.id,
         fallback_from_account_id: fallbackUsed ? account.id : null,
         remote_invite_id: result.remoteInviteId || result.remote_invite_id || '',
@@ -2857,8 +2862,10 @@ router.post('/auto-invite', async (req, res) => {
 
     if (result.success) {
       const fallbackUsed = usedAccount.id !== account.id;
+      const cdkTaskId = String(req.body.cdk_task_id || req.body.cdkTaskId || '').trim();
       const finalResult = {
         ...result,
+        cdk_task_id: cdkTaskId || result.cdk_task_id || result.cdkTaskId || '',
         requested_account_id: account.id,
         fallback_from_account_id: fallbackUsed ? account.id : null,
         remote_invite_id: result.remoteInviteId || result.remote_invite_id || '',
@@ -2876,7 +2883,6 @@ router.post('/auto-invite', async (req, res) => {
         releaseWorkspaceSlot(workspaceReservation);
         workspaceReservation = null;
       }
-      const cdkTaskId = String(req.body.cdk_task_id || req.body.cdkTaskId || '').trim();
       if (cdkTaskId) {
         try {
           completeCdkTeamTask(cdkTaskId, finalResult, { source: 'auto_invite_route_success' });

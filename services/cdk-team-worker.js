@@ -223,6 +223,7 @@ class CdkTeamWorker {
       return;
     }
 
+    const shouldHoldCdk = this.shouldDelayReconcile(errorMessage);
     const fail = db.transaction(() => {
       const taskResult = db.prepare(`
         UPDATE cdk_tasks
@@ -234,7 +235,7 @@ class CdkTeamWorker {
           AND status != 'SUCCESS'
       `).run(errorMessage, taskId);
 
-      if (taskResult.changes > 0 && task?.cdk_id) {
+      if (taskResult.changes > 0 && task?.cdk_id && !shouldHoldCdk) {
         db.prepare(`
           UPDATE cdk_cards
           SET status = 'unused',

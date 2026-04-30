@@ -35,6 +35,7 @@ function buildInviteResultFromInvite(invite = {}) {
     delivery_type: normalizeText(invite.delivery_type) || 'send',
     workspace_id: workspaceId,
     workspace_name: workspaceName,
+    cdk_task_id: normalizeText(invite.cdk_task_id),
     plan_type: normalizeText(invite.plan_type),
     status: normalizeText(invite.status),
   };
@@ -54,6 +55,24 @@ function findSuccessfulInviteForTask(taskOrId) {
     return null;
   }
 
+  const linkedInvite = db.prepare(`
+    SELECT
+      i.*,
+      a.email AS account_email,
+      a.label AS account_label
+    FROM invites i
+    LEFT JOIN accounts a ON a.id = i.account_id
+    WHERE i.cdk_task_id = ?
+      AND COALESCE(i.status, '') IN ('sent', 'accepted')
+      AND COALESCE(i.failure_category, '') = ''
+    ORDER BY datetime(COALESCE(NULLIF(i.updated_at, ''), i.created_at)) DESC
+    LIMIT 1
+  `).get(task.id);
+
+  if (linkedInvite) {
+    return linkedInvite;
+  }
+
   return db.prepare(`
     SELECT
       i.*,
@@ -62,13 +81,14 @@ function findSuccessfulInviteForTask(taskOrId) {
     FROM invites i
     LEFT JOIN accounts a ON a.id = i.account_id
     WHERE LOWER(i.target_email) = LOWER(?)
+      AND (COALESCE(i.cdk_task_id, '') = '' OR i.cdk_task_id = ?)
       AND COALESCE(i.status, '') IN ('sent', 'accepted')
       AND COALESCE(i.failure_category, '') = ''
       AND datetime(COALESCE(NULLIF(i.updated_at, ''), i.created_at))
           >= datetime(COALESCE(NULLIF(?, ''), 'now'), '-15 minutes')
     ORDER BY datetime(COALESCE(NULLIF(i.updated_at, ''), i.created_at)) DESC
     LIMIT 1
-  `).get(targetEmail, task.created_at || task.updated_at || '');
+  `).get(targetEmail, task.id, task.created_at || task.updated_at || '');
 }
 
 function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
@@ -84,6 +104,67 @@ function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
 
   if (normalizeText(task.task_type) && normalizeText(task.task_type) !== 'team_invite') {
     return { completed: false, reason: 'not_team_invite_task' };
+  }
+
+  if (normalizeText(task.status).toUpperCase() === 'SUCCESS') {
+    return {
+      completed: true,
+      alreadyCompleted: true,
+      task,
+      inviteResult: parseJsonSafely(task.invite_result_json),
+    };
+  }
+
+  if (task.cdk_id) {
+    const existingSuccess = db.prepare(`
+      SELECT *
+      FROM cdk_tasks
+      WHERE cdk_id = ?
+        AND task_type = 'team_invite'
+        AND status = 'SUCCESS'
+        AND id != ?
+      ORDER BY datetime(COALESCE(NULLIF(completed_at, ''), updated_at, created_at)) DESC
+      LIMIT 1
+    `).get(task.cdk_id, normalizedTaskId);
+
+    if (existingSuccess) {
+      const duplicateResult = {
+        ...parseJsonSafely(task.invite_result_json),
+        ...inviteResult,
+        duplicate_ignored: true,
+        duplicate_of_task_id: existingSuccess.id,
+        cdk_task_sync_source: options.source || 'unknown',
+        cdk_task_synced_at: new Date().toISOString(),
+      };
+
+      db.prepare(`
+        UPDATE cdk_tasks
+        SET status = 'FAILED',
+            status_message = '重复 CDK 任务已忽略',
+            error_message = '该 CDK 已由其他任务完成',
+            invite_result_json = ?,
+            completed_at = COALESCE(completed_at, datetime('now')),
+            updated_at = datetime('now')
+        WHERE id = ?
+          AND status != 'SUCCESS'
+      `).run(JSON.stringify(duplicateResult), normalizedTaskId);
+
+      db.prepare(`
+        UPDATE cdk_cards
+        SET status = 'used',
+            assigned_email = COALESCE(NULLIF(assigned_email, ''), ?),
+            used_at = COALESCE(used_at, datetime('now')),
+            updated_at = datetime('now')
+        WHERE id = ?
+      `).run(existingSuccess.account_email || task.account_email || '', task.cdk_id);
+
+      return {
+        completed: false,
+        reason: 'cdk_already_completed',
+        task,
+        existingTask: existingSuccess,
+      };
+    }
   }
 
   const result = {
@@ -121,6 +202,38 @@ function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
             updated_at = datetime('now')
         WHERE id = ?
       `).run(task.account_email || '', task.cdk_id);
+    }
+
+    const inviteId = Number(result.invite_id || result.inviteId || 0);
+    const remoteInviteId = normalizeText(result.remote_invite_id || result.remoteInviteId);
+    const workspaceId = normalizeText(result.workspace_id || result.workspaceId);
+    const targetEmail = normalizeEmail(task.account_email);
+
+    if (inviteId > 0) {
+      db.prepare(`
+        UPDATE invites
+        SET cdk_task_id = ?,
+            updated_at = datetime('now')
+        WHERE id = ?
+      `).run(normalizedTaskId, inviteId);
+    } else if (remoteInviteId) {
+      db.prepare(`
+        UPDATE invites
+        SET cdk_task_id = ?,
+            updated_at = datetime('now')
+        WHERE remote_invite_id = ?
+          AND COALESCE(cdk_task_id, '') = ''
+      `).run(normalizedTaskId, remoteInviteId);
+    } else if (workspaceId && targetEmail) {
+      db.prepare(`
+        UPDATE invites
+        SET cdk_task_id = ?,
+            updated_at = datetime('now')
+        WHERE workspace_id = ?
+          AND LOWER(target_email) = LOWER(?)
+          AND COALESCE(status, '') IN ('sent', 'accepted')
+          AND COALESCE(cdk_task_id, '') = ''
+      `).run(normalizedTaskId, workspaceId, targetEmail);
     }
   });
 
