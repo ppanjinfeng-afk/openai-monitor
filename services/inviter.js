@@ -19,6 +19,14 @@ const INVITE_PAGE_READY_DELAY_MS = Math.max(
   0,
   Number(process.env.CDK_TEAM_PAGE_READY_DELAY_MS || 500)
 );
+const INVITE_SCRIPT_TIMEOUT_MS = Math.max(
+  30000,
+  Number(process.env.CDK_TEAM_BROWSER_SCRIPT_TIMEOUT_MS || 75000)
+);
+const INVITE_REMOTE_FETCH_TIMEOUT_MS = Math.max(
+  5000,
+  Number(process.env.CDK_TEAM_REMOTE_FETCH_TIMEOUT_MS || 20000)
+);
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
@@ -224,6 +232,7 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
   let browserIsShared = false;
   let context = null;
   let page = null;
+  let inviteScriptTimer = null;
 
   try {
     const pptr = await getPuppeteer();
@@ -240,7 +249,21 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
     console.log(`[Inviter] Opening chatgpt.com for ${account.email}${browserIsShared ? ' (shared browser)' : ''}...`);
     await primeInvitePage(page);
 
-    const result = await page.evaluate(async ({ accessToken, emailToInvite, forceResend, selectedWorkspaceId, selectedWorkspaceName, maxReservedSeats }) => {
+    const inviteScriptTimeout = new Promise((_, reject) => {
+      inviteScriptTimer = setTimeout(() => {
+        const seconds = Math.round(INVITE_SCRIPT_TIMEOUT_MS / 1000);
+        reject(new Error(`Team invite browser script timeout (${seconds}s)`));
+        page?.close?.().catch(() => {});
+        context?.close?.().catch(() => {});
+      }, INVITE_SCRIPT_TIMEOUT_MS);
+
+      if (typeof inviteScriptTimer.unref === 'function') {
+        inviteScriptTimer.unref();
+      }
+    });
+
+    const result = await Promise.race([
+      page.evaluate(async ({ accessToken, emailToInvite, forceResend, selectedWorkspaceId, selectedWorkspaceName, maxReservedSeats, remoteFetchTimeoutMs }) => {
       const DUPLICATE_HINTS = [
         'already invited',
         'already been invited',
@@ -363,8 +386,29 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
         return '';
       };
 
+      const fetchWithTimeout = async (url, options = {}) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), remoteFetchTimeoutMs);
+
+        try {
+          return await fetch(url, {
+            ...options,
+            signal: controller.signal,
+          });
+        } catch (err) {
+          if (err?.name === 'AbortError') {
+            const seconds = Math.round(remoteFetchTimeoutMs / 1000);
+            throw new Error(`ChatGPT request timeout (${seconds}s): ${url}`);
+          }
+
+          throw err;
+        } finally {
+          clearTimeout(timeout);
+        }
+      };
+
       const listWorkspaces = async () => {
-        const accountsRes = await fetch(
+        const accountsRes = await fetchWithTimeout(
           'https://chatgpt.com/backend-api/accounts/check/v4-2023-04-27?server_time=true',
           { headers: getHeaders(null) }
         );
@@ -435,7 +479,7 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
         const invites = [];
 
         while (true) {
-          const listRes = await fetch(
+          const listRes = await fetchWithTimeout(
             `https://chatgpt.com/backend-api/accounts/${workspaceId}/invites?limit=${limit}&offset=${offset}&query=`,
             { headers: getHeaders(workspaceId) }
           );
@@ -473,7 +517,7 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
         const users = [];
 
         while (true) {
-          const usersRes = await fetch(
+          const usersRes = await fetchWithTimeout(
             `https://chatgpt.com/backend-api/accounts/${workspaceId}/users?limit=${limit}&offset=${offset}&query=`,
             { headers: getHeaders(workspaceId) }
           );
@@ -570,7 +614,7 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
           };
         }
 
-        const resendRes = await fetch(
+        const resendRes = await fetchWithTimeout(
           `https://chatgpt.com/backend-api/accounts/${workspaceId}/invites/${inviteId}`,
           {
             method: 'PATCH',
@@ -595,7 +639,7 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
       };
 
       const revokeInviteByEmail = async (workspaceId, emailAddress) => {
-        const revokeRes = await fetch(
+        const revokeRes = await fetchWithTimeout(
           `https://chatgpt.com/backend-api/accounts/${workspaceId}/invites`,
           {
             method: 'DELETE',
@@ -627,7 +671,7 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
       };
 
       const createInvite = async (workspaceId) => {
-        const inviteRes = await fetch(`https://chatgpt.com/backend-api/accounts/${workspaceId}/invites`, {
+        const inviteRes = await fetchWithTimeout(`https://chatgpt.com/backend-api/accounts/${workspaceId}/invites`, {
           method: 'POST',
           headers: getHeaders(workspaceId, {
             'Content-Type': 'application/json',
@@ -807,13 +851,23 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
       selectedWorkspaceId: options.workspaceId || '',
       selectedWorkspaceName: options.workspaceName || '',
       maxReservedSeats: Number(options.maxReservedSeats || account.invite_total || 0),
-    });
+      remoteFetchTimeoutMs: INVITE_REMOTE_FETCH_TIMEOUT_MS,
+    }),
+      inviteScriptTimeout,
+    ]);
 
     return result;
   } catch (err) {
     console.error(`[Inviter] Error sending invite to ${trimmedEmail}:`, err);
-    return { success: false, message: `Browser script failed: ${err.message}` };
+    const message = `Browser script failed: ${err.message}`;
+    return {
+      success: false,
+      code: message.toLowerCase().includes('timeout') ? 'browser_script_timeout' : 'browser_script_failed',
+      message,
+    };
   } finally {
+    clearTimeout(inviteScriptTimer);
+
     if (context) {
       await context.close().catch(() => {});
     } else if (page) {

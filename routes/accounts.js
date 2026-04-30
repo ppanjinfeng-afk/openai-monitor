@@ -1697,6 +1697,8 @@ function shouldFallbackInviteResult(result) {
     || code === 'workspace_lookup_failed'
     || code === 'invite_lookup_failed'
     || code === 'user_lookup_failed'
+    || code === 'browser_script_timeout'
+    || code === 'browser_script_failed'
     || (code === 'create_failed' && (
       message.includes('deactivated_workspace')
       || message.includes('workspace not found')
@@ -1710,6 +1712,8 @@ function shouldFallbackInviteResult(result) {
     || message.includes('workspace not found')
     || message.includes('invalidated oauth token')
     || message.includes('encountered invalidated oauth token')
+    || message.includes('browser script failed')
+    || message.includes('request timeout')
     || message.includes('http 401')
     || message.includes('http 402')
     || message.includes('http 403')
