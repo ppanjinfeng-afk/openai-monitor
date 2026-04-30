@@ -1,4 +1,5 @@
 const db = require('../db');
+const { markDuplicateTeamCdkTaskUntracked } = require('./cdk-team-dedupe');
 
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
@@ -91,6 +92,42 @@ function findSuccessfulInviteForTask(taskOrId) {
   `).get(targetEmail, task.id, task.created_at || task.updated_at || '');
 }
 
+function findFirstSuccessfulTaskForSameCdk(task) {
+  if (task.cdk_id) {
+    return db.prepare(`
+      SELECT *
+      FROM cdk_tasks
+      WHERE cdk_id = ?
+        AND task_type = 'team_invite'
+        AND status = 'SUCCESS'
+        AND id != ?
+      ORDER BY datetime(COALESCE(NULLIF(completed_at, ''), updated_at, created_at)) ASC,
+               datetime(created_at) ASC,
+               id ASC
+      LIMIT 1
+    `).get(task.cdk_id, task.id);
+  }
+
+  const cdkCode = normalizeText(task.cdk_code);
+  if (!cdkCode) {
+    return null;
+  }
+
+  return db.prepare(`
+    SELECT *
+    FROM cdk_tasks
+    WHERE cdk_id IS NULL
+      AND TRIM(cdk_code) = ?
+      AND task_type = 'team_invite'
+      AND status = 'SUCCESS'
+      AND id != ?
+    ORDER BY datetime(COALESCE(NULLIF(completed_at, ''), updated_at, created_at)) ASC,
+             datetime(created_at) ASC,
+             id ASC
+    LIMIT 1
+  `).get(cdkCode, task.id);
+}
+
 function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
   const normalizedTaskId = normalizeText(taskId);
   if (!normalizedTaskId) {
@@ -115,56 +152,19 @@ function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
     };
   }
 
-  if (task.cdk_id) {
-    const existingSuccess = db.prepare(`
-      SELECT *
-      FROM cdk_tasks
-      WHERE cdk_id = ?
-        AND task_type = 'team_invite'
-        AND status = 'SUCCESS'
-        AND id != ?
-      ORDER BY datetime(COALESCE(NULLIF(completed_at, ''), updated_at, created_at)) DESC
-      LIMIT 1
-    `).get(task.cdk_id, normalizedTaskId);
+  const existingSuccess = findFirstSuccessfulTaskForSameCdk(task);
+  if (existingSuccess) {
+    markDuplicateTeamCdkTaskUntracked(task, existingSuccess, {
+      source: options.source || 'cdk_task_sync_duplicate',
+      inviteResult,
+    });
 
-    if (existingSuccess) {
-      const duplicateResult = {
-        ...parseJsonSafely(task.invite_result_json),
-        ...inviteResult,
-        duplicate_ignored: true,
-        duplicate_of_task_id: existingSuccess.id,
-        cdk_task_sync_source: options.source || 'unknown',
-        cdk_task_synced_at: new Date().toISOString(),
-      };
-
-      db.prepare(`
-        UPDATE cdk_tasks
-        SET status = 'FAILED',
-            status_message = '重复 CDK 任务已忽略',
-            error_message = '该 CDK 已由其他任务完成',
-            invite_result_json = ?,
-            completed_at = COALESCE(completed_at, datetime('now')),
-            updated_at = datetime('now')
-        WHERE id = ?
-          AND status != 'SUCCESS'
-      `).run(JSON.stringify(duplicateResult), normalizedTaskId);
-
-      db.prepare(`
-        UPDATE cdk_cards
-        SET status = 'used',
-            assigned_email = COALESCE(NULLIF(assigned_email, ''), ?),
-            used_at = COALESCE(used_at, datetime('now')),
-            updated_at = datetime('now')
-        WHERE id = ?
-      `).run(existingSuccess.account_email || task.account_email || '', task.cdk_id);
-
-      return {
-        completed: false,
-        reason: 'cdk_already_completed',
-        task,
-        existingTask: existingSuccess,
-      };
-    }
+    return {
+      completed: false,
+      reason: 'cdk_already_completed',
+      task,
+      existingTask: existingSuccess,
+    };
   }
 
   const result = {

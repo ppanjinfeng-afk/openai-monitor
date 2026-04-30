@@ -140,7 +140,36 @@ function buildUntrackedMemberQuery({ search = '' } = {}) {
         AND a.access_token != ''
         AND COALESCE(wp.email, '') != ''
     ),
-    known_sources AS (
+    member_locations AS (
+      SELECT
+        email_key,
+        COUNT(DISTINCT (account_id || ':' || workspace_id)) AS location_count
+      FROM untracked_items
+      GROUP BY email_key
+    ),
+    known_exact_sources AS (
+      SELECT DISTINCT
+        LOWER(TRIM(target_email)) AS email_key,
+        workspace_id AS workspace_key
+      FROM invites
+      WHERE COALESCE(target_email, '') != ''
+        AND COALESCE(workspace_id, '') != ''
+        AND COALESCE(status, '') != 'error'
+        AND COALESCE(failure_category, '') = ''
+      UNION
+      SELECT DISTINCT
+        LOWER(TRIM(i.target_email)) AS email_key,
+        i.workspace_id AS workspace_key
+      FROM invites i
+      JOIN cdk_tasks t ON t.id = i.cdk_task_id
+      WHERE COALESCE(i.target_email, '') != ''
+        AND COALESCE(i.workspace_id, '') != ''
+        AND COALESCE(i.status, '') != 'error'
+        AND COALESCE(i.failure_category, '') = ''
+        AND t.task_type = 'team_invite'
+        AND t.status = 'SUCCESS'
+    ),
+    known_global_sources AS (
       SELECT DISTINCT LOWER(TRIM(assigned_email)) AS email_key
       FROM cdk_cards
       WHERE COALESCE(assigned_email, '') != ''
@@ -156,19 +185,26 @@ function buildUntrackedMemberQuery({ search = '' } = {}) {
       SELECT DISTINCT LOWER(TRIM(account_email)) AS email_key
       FROM cdk_tasks
       WHERE COALESCE(account_email, '') != ''
+        AND status = 'SUCCESS'
       UNION
       SELECT DISTINCT LOWER(TRIM(target_email)) AS email_key
       FROM invites
       WHERE COALESCE(target_email, '') != ''
         AND COALESCE(status, '') != 'error'
         AND COALESCE(failure_category, '') = ''
+        AND COALESCE(workspace_id, '') = ''
     )
   `;
 
   const fromSql = `
     FROM untracked_items m
-    LEFT JOIN known_sources s ON s.email_key = m.email_key
-    WHERE s.email_key IS NULL
+    LEFT JOIN member_locations ml ON ml.email_key = m.email_key
+    LEFT JOIN known_exact_sources es
+      ON es.email_key = m.email_key
+      AND es.workspace_key = m.workspace_id
+    LEFT JOIN known_global_sources gs ON gs.email_key = m.email_key
+    WHERE es.email_key IS NULL
+      AND (COALESCE(ml.location_count, 0) > 1 OR gs.email_key IS NULL)
       ${searchWhere}
   `;
 
