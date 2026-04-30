@@ -490,12 +490,38 @@ async function rebalanceWorkspace(workspace) {
 
     if (!inviteResult || !inviteResult.success) {
       const lastFailure = inviteFailures[inviteFailures.length - 1] || {};
+      const failureMessage = formatMigrationInviteFailures(inviteFailures) || lastFailure.message || 'invite failed';
+      const removeResult = await workspaceMembers.removeMember(sourceAccount, member.user_id, {
+        workspaceId: workspace.workspace_id,
+        workspaceName: workspace.workspace_name,
+        planType: workspace.plan_type,
+      });
+
+      if (!removeResult.success && !isMemberAlreadyAbsent(removeResult)) {
+        failed += 1;
+        items.push({
+          email,
+          status: 'failed',
+          reason: 'remove_failed_after_invite_failed',
+          message: `${failureMessage}; remove failed: ${removeResult.message}`,
+          target_workspace_id: lastFailure.target_workspace_id || '',
+          target_workspace_name: lastFailure.target_workspace_name || '',
+          target_account_email: lastFailure.target_account_email || '',
+        });
+        logAction(
+          sourceAccount.id,
+          'error',
+          `[overflow-rebalance] invite ${email} failed after trying ${inviteFailures.length} target workspace(s), and removing from ${workspace.account_email}/${workspace.workspace_name || workspace.workspace_id} failed: ${removeResult.message}`
+        );
+        continue;
+      }
+
       failed += 1;
       items.push({
         email,
         status: 'failed',
-        reason: 'invite_failed',
-        message: formatMigrationInviteFailures(inviteFailures) || lastFailure.message || 'invite failed',
+        reason: 'removed_after_invite_failed',
+        message: `member removed to keep workspace within limit, but invite failed: ${failureMessage}`,
         target_workspace_id: lastFailure.target_workspace_id || '',
         target_workspace_name: lastFailure.target_workspace_name || '',
         target_account_email: lastFailure.target_account_email || '',
@@ -503,7 +529,7 @@ async function rebalanceWorkspace(workspace) {
       logAction(
         sourceAccount.id,
         'error',
-        `[overflow-rebalance] invite ${email} failed after trying ${inviteFailures.length} target workspace(s): ${formatMigrationInviteFailures(inviteFailures) || 'invite failed'}`
+        `[overflow-rebalance] removed ${email} from ${workspace.account_email}/${workspace.workspace_name || workspace.workspace_id} after all invite targets failed: ${failureMessage}`
       );
       continue;
     }
