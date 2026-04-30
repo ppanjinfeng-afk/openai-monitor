@@ -30,7 +30,8 @@ const PRESERVED_TRANSIENT_STATUSES = new Set([
 ]);
 
 const INVITE_FAILURE_WINDOW_HOURS = 24;
-const INVITE_DEGRADED_THRESHOLD = 1;
+const INVITE_DEGRADED_THRESHOLD = 3;
+const INVITE_SEVERE_DEGRADED_THRESHOLD = 5;
 const INVITE_PAUSE_REASON_BANNED = '检测到封号，系统已自动暂停邀请';
 const INVITE_PAUSE_REASON_DEGRADED = '检测到坏号，系统已自动暂停邀请';
 const BAN_TEXT_HINTS = [
@@ -137,7 +138,8 @@ function getRecentInviteFailureStats(accountId) {
   return db.prepare(`
     SELECT
       COALESCE(SUM(CASE WHEN failure_category = 'invite_not_materialized' THEN 1 ELSE 0 END), 0) AS materialize_failures,
-      COALESCE(SUM(CASE WHEN failure_category IN ('revoke_failed', 'resend_failed') THEN 1 ELSE 0 END), 0) AS retry_failures
+      COALESCE(SUM(CASE WHEN failure_category IN ('revoke_failed', 'resend_failed') THEN 1 ELSE 0 END), 0) AS retry_failures,
+      COALESCE(SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END), 0) AS invite_successes
     FROM invites
     WHERE account_id = ?
       AND updated_at >= datetime('now', '-${INVITE_FAILURE_WINDOW_HOURS} hours')
@@ -147,10 +149,17 @@ function getRecentInviteFailureStats(accountId) {
 function syncInvitePauseState(account, result) {
   const currentPaused = Number(account.invite_paused || 0) === 1;
   const currentReason = String(account.invite_pause_reason || '').trim();
+  const isSystemInvitePause =
+    currentReason === INVITE_PAUSE_REASON_BANNED
+    || currentReason === INVITE_PAUSE_REASON_DEGRADED
+    || currentReason.includes('封号')
+    || currentReason.includes('坏号');
   const inviteStats = getRecentInviteFailureStats(account.id);
+  const materializeFailures = Number(inviteStats.materialize_failures || 0);
+  const inviteSuccesses = Number(inviteStats.invite_successes || 0);
   const hasBadInviteEvidence =
-    Number(inviteStats.materialize_failures || 0) >= INVITE_DEGRADED_THRESHOLD
-    || Number(inviteStats.retry_failures || 0) >= INVITE_DEGRADED_THRESHOLD;
+    (materializeFailures >= INVITE_DEGRADED_THRESHOLD && inviteSuccesses === 0)
+    || materializeFailures >= INVITE_SEVERE_DEGRADED_THRESHOLD;
 
   let nextPaused = currentPaused;
   let nextReason = currentReason;
@@ -163,7 +172,7 @@ function syncInvitePauseState(account, result) {
     nextReason = INVITE_PAUSE_REASON_DEGRADED;
   } else if (
     currentPaused
-    && currentReason.includes('封号')
+    && isSystemInvitePause
     && result.status === STATUS.ACTIVE
   ) {
     nextPaused = false;

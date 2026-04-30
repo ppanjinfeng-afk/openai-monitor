@@ -95,7 +95,8 @@ async function runPostQuotaMaintenance(results = []) {
   };
 }
 const INVITE_FAILURE_WINDOW_HOURS = 24;
-const INVITE_DEGRADED_THRESHOLD = 1;
+const INVITE_DEGRADED_THRESHOLD = 3;
+const INVITE_SEVERE_DEGRADED_THRESHOLD = 5;
 const WORKSPACE_MEMBER_LIMIT = 8;
 const RECENT_MATERIALIZE_FAILURES_SQL = `
   COALESCE((
@@ -138,17 +139,23 @@ const LAST_INVITE_SUCCESS_AT_SQL = `
       AND invites.status = 'sent'
   ), '')
 `;
+const INVITE_DEGRADED_CONDITION_SQL = `
+  (
+    (${RECENT_MATERIALIZE_FAILURES_SQL} >= ${INVITE_DEGRADED_THRESHOLD} AND ${RECENT_INVITE_SUCCESSES_SQL} = 0)
+    OR ${RECENT_MATERIALIZE_FAILURES_SQL} >= ${INVITE_SEVERE_DEGRADED_THRESHOLD}
+  )
+`;
 const INVITE_HEALTH_STATUS_SQL = `
   CASE
     WHEN COALESCE(invite_paused, 0) = 1 THEN 'paused'
-    WHEN ${RECENT_MATERIALIZE_FAILURES_SQL} >= ${INVITE_DEGRADED_THRESHOLD} THEN 'degraded'
+    WHEN ${INVITE_DEGRADED_CONDITION_SQL} THEN 'degraded'
     WHEN ${RECENT_RETRY_FAILURES_SQL} > 0 THEN 'warning'
     ELSE 'healthy'
   END
 `;
 const INVITE_HEALTH_LABEL_SQL = `
   CASE
-    WHEN ${RECENT_MATERIALIZE_FAILURES_SQL} >= ${INVITE_DEGRADED_THRESHOLD} THEN '坏号'
+    WHEN ${INVITE_DEGRADED_CONDITION_SQL} THEN '坏号'
     WHEN ${RECENT_RETRY_FAILURES_SQL} > 0 THEN '待观察'
     ELSE '正常'
   END
@@ -1062,9 +1069,7 @@ function getInviteCandidateAccounts(excludedIds = [], options = {}) {
 
   const candidates = db.prepare(query).all(...params);
   const healthyCandidates = candidates.filter(account =>
-    Number(account.invite_paused || 0) === 0 &&
-    Number(account.recent_materialize_failures || 0) < INVITE_DEGRADED_THRESHOLD &&
-    Number(account.recent_retry_failures || 0) < INVITE_DEGRADED_THRESHOLD
+    Number(account.invite_paused || 0) === 0 && !isInviteDegraded(account)
   );
 
   if (includeDegraded) {
@@ -1326,10 +1331,16 @@ function isInviteDegraded(account) {
     return false;
   }
 
+  const materializeFailures = Number(account.recent_materialize_failures || 0);
+  const recentSuccesses = Number(account.recent_invite_successes || 0);
+
   return Number(account.invite_paused || 0) === 1
     || String(account.invite_health_status || '') === 'paused'
     || String(account.invite_health_status || '') === 'degraded'
-    || Number(account.recent_materialize_failures || 0) >= INVITE_DEGRADED_THRESHOLD;
+    || (
+      (materializeFailures >= INVITE_DEGRADED_THRESHOLD && recentSuccesses === 0)
+      || materializeFailures >= INVITE_SEVERE_DEGRADED_THRESHOLD
+    );
 }
 
 function isInvitePaused(account) {
@@ -1531,7 +1542,8 @@ function buildInviteHealthDiagnosis(account) {
     return pauseReason || '该账号已被系统暂停邀请，修复后可手动恢复';
   }
 
-  if (materializeFailures >= INVITE_DEGRADED_THRESHOLD) {
+  if ((materializeFailures >= INVITE_DEGRADED_THRESHOLD && recentSuccesses === 0)
+    || materializeFailures >= INVITE_SEVERE_DEGRADED_THRESHOLD) {
     return `近 ${INVITE_FAILURE_WINDOW_HOURS} 小时出现 ${materializeFailures} 次“假成功未落地”，建议暂停用于自动邀请`;
   }
 
@@ -2319,12 +2331,13 @@ router.post('/:id(\\d+)/restore-invite-health', (req, res) => {
     UPDATE invites
     SET failure_category = CASE
       WHEN failure_category = 'invite_not_materialized' THEN 'invite_not_materialized_restored'
+      WHEN failure_category = 'generic_error' THEN 'generic_error_restored'
       WHEN failure_category = 'revoke_failed' THEN 'revoke_failed_restored'
       WHEN failure_category = 'resend_failed' THEN 'resend_failed_restored'
       ELSE failure_category
     END
     WHERE account_id = ?
-      AND failure_category IN ('invite_not_materialized', 'revoke_failed', 'resend_failed')
+      AND failure_category IN ('invite_not_materialized', 'generic_error', 'revoke_failed', 'resend_failed')
       AND updated_at >= datetime('now', '-${INVITE_FAILURE_WINDOW_HOURS} hours')
   `).run(id);
 
@@ -2453,7 +2466,7 @@ router.post('/:id(\\d+)/invite', async (req, res) => {
 
       if (
         selectedAccountDiagnostics &&
-        Number(selectedAccountDiagnostics.recent_materialize_failures || 0) >= INVITE_DEGRADED_THRESHOLD &&
+        isInviteDegraded(selectedAccountDiagnostics) &&
         healthyFallbacks.length === 0
       ) {
         return res.status(409).json({
