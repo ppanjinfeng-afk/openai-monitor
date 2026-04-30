@@ -5,7 +5,7 @@ const workspaceSync = require('./workspace-sync');
 const SETTING_KEY = 'untracked_members_auto_kick_enabled';
 const DEFAULT_LIMIT = 100;
 
-function normalizeConcurrency(value, fallback = 2, max = 4) {
+function normalizeConcurrency(value, fallback = 2, max = 6) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return fallback;
@@ -17,7 +17,15 @@ function getCleanupWorkspaceConcurrency() {
   return normalizeConcurrency(
     process.env.UNTRACKED_CLEANUP_WORKSPACE_CONCURRENCY || process.env.MEMBER_REMOVAL_WORKSPACE_CONCURRENCY,
     2,
-    4
+    6
+  );
+}
+
+function getCleanupSyncConcurrency() {
+  return normalizeConcurrency(
+    process.env.MEMBER_CLEANUP_SYNC_CONCURRENCY || process.env.MEMBER_REMOVAL_WORKSPACE_CONCURRENCY,
+    2,
+    6
   );
 }
 
@@ -549,11 +557,11 @@ async function autoKickUntrackedMembers(options = {}) {
     ...pendingResult.workspaceRows,
   ]);
 
-  for (const workspaceRowId of workspaceRows) {
+  await runWithConcurrency(Array.from(workspaceRows), getCleanupSyncConcurrency(), async workspaceRowId => {
     await workspaceSync.syncWorkspaceByRowId(workspaceRowId).catch(err => {
       console.warn(`[UntrackedMemberCleanup] sync workspace ${workspaceRowId} failed after auto cleanup:`, err.message);
     });
-  }
+  });
 
   const removed = memberResult.removed || 0;
   const revoked = pendingResult.revoked || 0;

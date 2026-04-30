@@ -16,6 +16,38 @@ function normalizeWorkspaceId(workspaceId) {
   return String(workspaceId || '').trim();
 }
 
+function normalizeConcurrency(value, fallback = 2, max = 3) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return Math.max(1, Math.min(Math.floor(parsed), max));
+}
+
+function getRebalanceWorkspaceConcurrency(options = {}) {
+  return normalizeConcurrency(
+    options.workspaceConcurrency
+      || process.env.OVERFLOW_REBALANCE_WORKSPACE_CONCURRENCY
+      || process.env.MEMBER_MIGRATION_WORKSPACE_CONCURRENCY,
+    2,
+    3
+  );
+}
+
+async function runWithConcurrency(items, limit, worker) {
+  const list = Array.isArray(items) ? items : [];
+  const workerCount = Math.min(Math.max(1, limit), list.length);
+  let index = 0;
+
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (index < list.length) {
+      const currentIndex = index;
+      index += 1;
+      await worker(list[currentIndex], currentIndex);
+    }
+  }));
+}
+
 function getInternalBaseUrl() {
   return process.env.INTERNAL_BASE_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
 }
@@ -639,28 +671,30 @@ async function rebalanceOverflowMembers(options = {}) {
   try {
     const workspaceLimit = Math.max(1, parseInt(options.limitWorkspaces || '20', 10) || 20);
     const overflowWorkspaces = getOverflowWorkspaces(workspaceLimit);
-    const results = [];
+    const workspaceConcurrency = getRebalanceWorkspaceConcurrency(options);
+    const results = new Array(overflowWorkspaces.length);
     let moved = 0;
     let skipped = 0;
     let failed = 0;
 
-    for (const workspace of overflowWorkspaces) {
+    await runWithConcurrency(overflowWorkspaces, workspaceConcurrency, async (workspace, index) => {
       const result = await rebalanceWorkspace(workspace);
-      results.push(result);
+      results[index] = result;
       moved += Number(result.moved || 0);
       skipped += Number(result.skipped || 0);
       failed += Number(result.failed || 0);
-    }
+    });
 
     return {
       success: true,
       summary: {
         workspaces: overflowWorkspaces.length,
+        workspace_concurrency: workspaceConcurrency,
         moved,
         skipped,
         failed,
       },
-      results,
+      results: results.filter(Boolean),
     };
   } finally {
     rebalanceRunning = false;

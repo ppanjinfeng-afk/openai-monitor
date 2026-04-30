@@ -17,6 +17,44 @@ function normalizeHours(value) {
   return Math.max(1, Math.min(hours, MAX_HOURS));
 }
 
+function normalizeConcurrency(value, fallback = 2, max = 6) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return Math.max(1, Math.min(Math.floor(parsed), max));
+}
+
+function getCleanupWorkspaceConcurrency() {
+  return normalizeConcurrency(
+    process.env.STALE_CLEANUP_WORKSPACE_CONCURRENCY || process.env.MEMBER_REMOVAL_WORKSPACE_CONCURRENCY,
+    2,
+    6
+  );
+}
+
+function getCleanupSyncConcurrency() {
+  return normalizeConcurrency(
+    process.env.MEMBER_CLEANUP_SYNC_CONCURRENCY || process.env.MEMBER_REMOVAL_WORKSPACE_CONCURRENCY,
+    2,
+    6
+  );
+}
+
+async function runWithConcurrency(items, limit, worker) {
+  const list = Array.isArray(items) ? items : [];
+  const workerCount = Math.min(Math.max(1, limit), list.length);
+  let index = 0;
+
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (index < list.length) {
+      const currentIndex = index;
+      index += 1;
+      await worker(list[currentIndex], currentIndex);
+    }
+  }));
+}
+
 function isAutoKickEnabled() {
   const row = db.prepare(`SELECT value FROM settings WHERE key = ?`).get(ENABLED_SETTING_KEY);
   return row?.value === 'true';
@@ -163,7 +201,7 @@ async function removeStaleMembersWithSharedPages(members) {
   let removed = 0;
   let failed = 0;
 
-  for (const group of groupMembersForRemoval(members)) {
+  await runWithConcurrency(groupMembersForRemoval(members), getCleanupWorkspaceConcurrency(), async group => {
     const first = group[0];
     const account = db.prepare(`SELECT * FROM accounts WHERE id = ?`).get(first.account_id);
 
@@ -180,87 +218,102 @@ async function removeStaleMembersWithSharedPages(members) {
           message: 'Account is not authorized, cannot remove member',
         });
       }
-      continue;
+      return;
     }
 
-    await workspaceMembers.withWorkspacePage(async page => {
-      const batchResult = await workspaceMembers.removeMembers(
-        account,
-        group.map((member, index) => ({
-          clientIndex: index,
-          userId: member.user_id,
-          email: member.email || '',
-        })),
-        {
-          workspaceId: first.workspace_id || '',
-          workspaceName: first.workspace_name || first.workspace_id || '',
-          planType: first.plan_type || '',
-          page,
-          concurrency: Number(process.env.MEMBER_REMOVAL_MEMBER_CONCURRENCY || 4) || 4,
-        }
-      );
-
-      const batchItems = Array.isArray(batchResult.results) && batchResult.results.length > 0
-        ? batchResult.results
-        : group.map((member, index) => ({
+    try {
+      await workspaceMembers.withWorkspacePage(async page => {
+        const batchResult = await workspaceMembers.removeMembers(
+          account,
+          group.map((member, index) => ({
             clientIndex: index,
             userId: member.user_id,
             email: member.email || '',
-            success: false,
-            message: batchResult.message || 'Remove member failed',
-          }));
-
-      for (const item of batchItems) {
-        const member = group[Number(item.clientIndex || 0)] || group.find(row => row.user_id === item.userId);
-        if (!member) {
-          failed += 1;
-          results.push({
-            success: false,
-            email: item.email || '',
-            message: item.message || 'Member not found after remove',
-          });
-          continue;
-        }
-
-        if (item.success) {
-          markMemberRemoved(member);
-          db.prepare(`
-            INSERT INTO check_logs (account_id, status, message)
-            VALUES (?, ?, ?)
-          `).run(
-            member.account_id,
-            'active',
-            `[stale-member-auto-kick] ${member.email || member.user_id} from ${member.workspace_name || member.workspace_id || '-'}`
-          );
-          removed += 1;
-          if (member.workspace_row_id) {
-            workspaceRows.add(Number(member.workspace_row_id));
+          })),
+          {
+            workspaceId: first.workspace_id || '',
+            workspaceName: first.workspace_name || first.workspace_id || '',
+            planType: first.plan_type || '',
+            page,
+            concurrency: Number(process.env.MEMBER_REMOVAL_MEMBER_CONCURRENCY || 4) || 4,
           }
-          results.push({
-            success: true,
-            email: member.email || '',
-            workspace_row_id: member.workspace_row_id || 0,
-            workspace_id: member.workspace_id || '',
-            workspace_name: member.workspace_name || '',
-            account_id: member.account_id,
-            account_email: member.account_email || '',
-            message: 'Removed member',
-          });
-        } else {
-          failed += 1;
-          results.push({
-            success: false,
-            email: member.email || '',
-            workspace_id: member.workspace_id || '',
-            workspace_name: member.workspace_name || '',
-            account_id: member.account_id,
-            account_email: member.account_email || '',
-            message: item.message || 'Remove member failed',
-          });
+        );
+
+        const batchItems = Array.isArray(batchResult.results) && batchResult.results.length > 0
+          ? batchResult.results
+          : group.map((member, index) => ({
+              clientIndex: index,
+              userId: member.user_id,
+              email: member.email || '',
+              success: false,
+              message: batchResult.message || 'Remove member failed',
+            }));
+
+        for (const item of batchItems) {
+          const member = group[Number(item.clientIndex || 0)] || group.find(row => row.user_id === item.userId);
+          if (!member) {
+            failed += 1;
+            results.push({
+              success: false,
+              email: item.email || '',
+              message: item.message || 'Member not found after remove',
+            });
+            continue;
+          }
+
+          if (item.success) {
+            markMemberRemoved(member);
+            db.prepare(`
+              INSERT INTO check_logs (account_id, status, message)
+              VALUES (?, ?, ?)
+            `).run(
+              member.account_id,
+              'active',
+              `[stale-member-auto-kick] ${member.email || member.user_id} from ${member.workspace_name || member.workspace_id || '-'}`
+            );
+            removed += 1;
+            if (member.workspace_row_id) {
+              workspaceRows.add(Number(member.workspace_row_id));
+            }
+            results.push({
+              success: true,
+              email: member.email || '',
+              workspace_row_id: member.workspace_row_id || 0,
+              workspace_id: member.workspace_id || '',
+              workspace_name: member.workspace_name || '',
+              account_id: member.account_id,
+              account_email: member.account_email || '',
+              message: 'Removed member',
+            });
+          } else {
+            failed += 1;
+            results.push({
+              success: false,
+              email: member.email || '',
+              workspace_id: member.workspace_id || '',
+              workspace_name: member.workspace_name || '',
+              account_id: member.account_id,
+              account_email: member.account_email || '',
+              message: item.message || 'Remove member failed',
+            });
+          }
         }
+      });
+    } catch (err) {
+      for (const member of group) {
+        failed += 1;
+        results.push({
+          success: false,
+          email: member.email || '',
+          workspace_id: member.workspace_id || '',
+          workspace_name: member.workspace_name || '',
+          account_id: member.account_id,
+          account_email: member.account_email || '',
+          message: err.message || 'Remove member failed',
+        });
       }
-    });
-  }
+    }
+  });
 
   return { results, removed, failed, workspaceRows };
 }
@@ -286,11 +339,11 @@ async function autoKickStaleMembers(options = {}) {
 
   const { results, removed, failed, workspaceRows } = await removeStaleMembersWithSharedPages(members);
 
-  for (const workspaceRowId of workspaceRows) {
+  await runWithConcurrency(Array.from(workspaceRows), getCleanupSyncConcurrency(), async workspaceRowId => {
     await workspaceSync.syncWorkspaceByRowId(workspaceRowId).catch(err => {
       console.warn(`[StaleMemberCleanup] sync workspace ${workspaceRowId} failed after auto kick:`, err.message);
     });
-  }
+  });
 
   if (removed > 0 || failed > 0) {
     console.log(`[StaleMemberCleanup] auto kick complete: hours=${hours}, removed=${removed}, failed=${failed}`);
