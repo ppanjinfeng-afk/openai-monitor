@@ -120,7 +120,11 @@ async function telegramApi(method, payload = {}) {
 async function localApi(path, options = {}) {
   const res = await fetch(`${baseUrl}${path}`, {
     method: options.method || 'GET',
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-openai-monitor-internal': '1',
+      ...(options.headers || {}),
+    },
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 

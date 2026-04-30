@@ -273,7 +273,10 @@ async function requestAutoInvite(email, sourceWorkspace, targetWorkspace, option
 
   const response = await fetch(`${getInternalBaseUrl()}/api/accounts/auto-invite`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-openai-monitor-internal': '1',
+    },
     body: JSON.stringify({
       email,
       prefer_fresh_workspace: true,
