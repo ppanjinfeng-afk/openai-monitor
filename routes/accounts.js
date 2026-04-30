@@ -102,7 +102,13 @@ const RECENT_MATERIALIZE_FAILURES_SQL = `
     SELECT COUNT(*)
     FROM invites
     WHERE invites.account_id = accounts.id
-      AND invites.failure_category = 'invite_not_materialized'
+      AND (
+        invites.failure_category = 'invite_not_materialized'
+        OR (
+          invites.failure_category = 'generic_error'
+          AND LOWER(COALESCE(invites.message, '')) LIKE '%unable to invite user due to an error%'
+        )
+      )
       AND invites.updated_at >= datetime('now', '-${INVITE_FAILURE_WINDOW_HOURS} hours')
   ), 0)
 `;
@@ -198,6 +204,7 @@ const ACCOUNT_INVITE_HEALTH_SELECT_SQL = `
     FROM check_logs
     WHERE check_logs.account_id = accounts.id
       AND check_logs.message LIKE '[overflow-rebalance]%'
+      AND check_logs.message NOT LIKE '[overflow-rebalance] invite attempt %; trying next target workspace'
     ORDER BY datetime(check_logs.checked_at) DESC, check_logs.id DESC
     LIMIT 1
   ), '') AS overflow_rebalance_status,
@@ -206,6 +213,7 @@ const ACCOUNT_INVITE_HEALTH_SELECT_SQL = `
     FROM check_logs
     WHERE check_logs.account_id = accounts.id
       AND check_logs.message LIKE '[overflow-rebalance]%'
+      AND check_logs.message NOT LIKE '[overflow-rebalance] invite attempt %; trying next target workspace'
     ORDER BY datetime(check_logs.checked_at) DESC, check_logs.id DESC
     LIMIT 1
   ), '') AS overflow_rebalance_message,
@@ -214,6 +222,7 @@ const ACCOUNT_INVITE_HEALTH_SELECT_SQL = `
     FROM check_logs
     WHERE check_logs.account_id = accounts.id
       AND check_logs.message LIKE '[overflow-rebalance]%'
+      AND check_logs.message NOT LIKE '[overflow-rebalance] invite attempt %; trying next target workspace'
     ORDER BY datetime(check_logs.checked_at) DESC, check_logs.id DESC
     LIMIT 1
   ), '') AS overflow_rebalance_checked_at,
@@ -321,6 +330,19 @@ function parseOverflowRebalanceMessage(message = '', fallbackAccountEmail = '') 
     };
   }
 
+  match = rawMessage.match(/^\[overflow-rebalance\]\s+invite attempt\s+(\S+)\s+to\s+([^/]+)\/(.+?)\s+failed:\s+(.+?);\s+trying next target workspace$/i);
+  if (match) {
+    return {
+      ...base,
+      type: 'invite_attempt_failed',
+      member_email: match[1],
+      target_account_email: match[2],
+      target_workspace: match[3],
+      detail: match[4],
+      summary: `${match[1]} 目标空间尝试失败，继续换下一个空间`,
+    };
+  }
+
   match = rawMessage.match(/^\[overflow-rebalance\]\s+invite\s+(\S+)\s+to\s+([^/]+)\/(.+?)\s+failed:\s+(.+)$/i);
   if (match) {
     return {
@@ -357,6 +379,19 @@ function parseOverflowRebalanceMessage(message = '', fallbackAccountEmail = '') 
       source_workspace: match[3],
       summary: `${match[1]} 暂无可迁移目标`,
       detail: '当前没有其它可用账号可承接这个成员',
+    };
+  }
+
+  match = rawMessage.match(/^\[overflow-rebalance\]\s+removed\s+(\S+)\s+from\s+([^/]+)\/(.+?)\s+after all invite targets failed:\s+(.+)$/i);
+  if (match) {
+    return {
+      ...base,
+      type: 'removed_after_invite_failed',
+      member_email: match[1],
+      source_account_email: match[2],
+      source_workspace: match[3],
+      detail: match[4],
+      summary: `${match[1]} 已移出源空间，但所有目标邀请都失败`,
     };
   }
 
@@ -407,10 +442,10 @@ function overflowRebalanceRecordTone(type = '', status = '') {
   if (normalizedType === 'moved') {
     return 'success';
   }
-  if (normalizedType === 'removed_without_target' || normalizedType === 'remove_failed_no_target') {
+  if (normalizedType === 'removed_without_target' || normalizedType === 'remove_failed_no_target' || normalizedType === 'removed_after_invite_failed') {
     return 'danger';
   }
-  if (normalizedType === 'no_target_workspace') {
+  if (normalizedType === 'no_target_workspace' || normalizedType === 'invite_attempt_failed') {
     return 'warning';
   }
   if (normalizedStatus === 'active') {
@@ -429,10 +464,14 @@ function overflowRebalanceRecordLabel(type = '', status = '') {
   switch (normalizedType) {
     case 'moved':
       return '已迁移';
+    case 'invite_attempt_failed':
+      return '尝试换空间';
     case 'invite_failed':
       return '邀请失败';
     case 'remove_failed':
       return '移除失败';
+    case 'removed_after_invite_failed':
+      return '已移出未邀请';
     case 'removed_without_target':
       return '迁移失败';
     case 'remove_failed_no_target':
@@ -554,7 +593,7 @@ function buildOverflowRebalanceRecord(row = {}) {
     ...parsed,
     target_account_email: targetAccountEmail,
     target_workspace: targetWorkspace,
-    summary: parsed.member_email && targetAccountEmail
+    summary: parsed.type === 'moved' && parsed.member_email && targetAccountEmail
       ? `${parsed.member_email} 已迁移到 ${targetAccountEmail}`
       : parsed.summary,
     tone,
@@ -971,7 +1010,13 @@ function getInviteCandidateAccounts(excludedIds = [], options = {}) {
         SELECT COUNT(*)
         FROM invites
         WHERE invites.account_id = accounts.id
-          AND invites.failure_category = 'invite_not_materialized'
+          AND (
+            invites.failure_category = 'invite_not_materialized'
+            OR (
+              invites.failure_category = 'generic_error'
+              AND LOWER(COALESCE(invites.message, '')) LIKE '%unable to invite user due to an error%'
+            )
+          )
           AND invites.updated_at >= datetime('now', '-${INVITE_FAILURE_WINDOW_HOURS} hours')
       ), 0) AS recent_materialize_failures,
       COALESCE((
@@ -1203,7 +1248,13 @@ function getPreferredWorkspaceCandidate(preferredAccountId = 0, preferredWorkspa
         SELECT COUNT(*)
         FROM invites
         WHERE invites.account_id = accounts.id
-          AND invites.failure_category = 'invite_not_materialized'
+          AND (
+            invites.failure_category = 'invite_not_materialized'
+            OR (
+              invites.failure_category = 'generic_error'
+              AND LOWER(COALESCE(invites.message, '')) LIKE '%unable to invite user due to an error%'
+            )
+          )
           AND invites.updated_at >= datetime('now', '-${INVITE_FAILURE_WINDOW_HOURS} hours')
       ), 0) AS recent_materialize_failures,
       COALESCE((
@@ -1877,6 +1928,7 @@ router.get('/overflow-rebalance-records', (req, res) => {
     FROM check_logs
     JOIN accounts ON accounts.id = check_logs.account_id
     WHERE check_logs.message LIKE '[overflow-rebalance]%'
+      AND check_logs.message NOT LIKE '[overflow-rebalance] invite attempt %; trying next target workspace'
     ORDER BY datetime(check_logs.checked_at) DESC, check_logs.id DESC
     LIMIT ?
   `).all(limit);
@@ -2652,12 +2704,16 @@ router.post('/auto-invite', async (req, res) => {
       }
 
       if (preferredWorkspaceCandidate) {
-        workspaceCandidates = [
-          preferredWorkspaceCandidate,
-          ...workspaceCandidates.filter(candidate =>
-            normalizeWorkspaceId(candidate?.workspaceId) !== normalizeWorkspaceId(preferredWorkspaceCandidate.workspaceId)
-          ),
-        ];
+        if (preferredWorkspaceId && !allowPreferredWorkspaceFallback) {
+          workspaceCandidates = [preferredWorkspaceCandidate];
+        } else {
+          workspaceCandidates = [
+            preferredWorkspaceCandidate,
+            ...workspaceCandidates.filter(candidate =>
+              normalizeWorkspaceId(candidate?.workspaceId) !== normalizeWorkspaceId(preferredWorkspaceCandidate.workspaceId)
+            ),
+          ];
+        }
       } else {
         workspaceCandidates = prioritizeWorkspaceCandidates(
           workspaceCandidates,
