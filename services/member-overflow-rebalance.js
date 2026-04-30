@@ -133,10 +133,10 @@ function getHistoricalWorkspaceIdsForEmail(memberEmail = '') {
   ));
 }
 
-function findMigrationTarget(memberEmail, sourceWorkspace) {
+function findMigrationTargets(memberEmail, sourceWorkspace, limit = 8) {
   const normalizedEmail = normalizeEmail(memberEmail);
   if (!normalizedEmail) {
-    return null;
+    return [];
   }
 
   const historicalWorkspaceIds = new Set(getHistoricalWorkspaceIdsForEmail(normalizedEmail));
@@ -189,6 +189,8 @@ function findMigrationTarget(memberEmail, sourceWorkspace) {
       w.id ASC
   `).all(normalizedEmail, normalizedEmail, sourceWorkspace.account_id, normalizeWorkspaceId(sourceWorkspace.workspace_id));
 
+  const targets = [];
+
   for (const row of rows) {
     if (historicalWorkspaceIds.has(normalizeWorkspaceId(row.workspace_id))) {
       continue;
@@ -219,7 +221,7 @@ function findMigrationTarget(memberEmail, sourceWorkspace) {
       continue;
     }
 
-    return {
+    targets.push({
       account_id: row.account_id,
       account_email: row.account_email,
       workspace_id: row.workspace_id,
@@ -229,21 +231,54 @@ function findMigrationTarget(memberEmail, sourceWorkspace) {
       member_total: memberTotal,
       pending_invites: pendingInvites,
       projected_member_total: projectedMemberTotal,
-    };
+    });
+
+    if (targets.length >= limit) {
+      break;
+    }
   }
 
-  return null;
+  return targets;
 }
 
-async function requestAutoInvite(email, sourceWorkspace, targetWorkspace) {
+function shouldSkipAccountAfterInviteFailure(message = '') {
+  const normalizedMessage = String(message || '').toLowerCase();
+  return normalizedMessage.includes('authentication required')
+    || normalizedMessage.includes('invalidated oauth token')
+    || normalizedMessage.includes('oauth')
+    || normalizedMessage.includes('token')
+    || normalizedMessage.includes('http 401')
+    || normalizedMessage.includes('unauthorized');
+}
+
+function formatMigrationInviteFailures(failures = []) {
+  return failures
+    .slice(0, 4)
+    .map(failure => {
+      const target = `${failure.target_account_email || 'unknown'}/${failure.target_workspace_name || failure.target_workspace_id || 'workspace'}`;
+      return `${target}: ${failure.message || 'invite failed'}`;
+    })
+    .join(' | ');
+}
+
+async function requestAutoInvite(email, sourceWorkspace, targetWorkspace, options = {}) {
+  const excludedAccountIds = Array.from(new Set([
+    Number(sourceWorkspace.account_id || 0),
+    ...(Array.isArray(options.excludeAccountIds) ? options.excludeAccountIds : []),
+  ].filter(Boolean)));
+  const excludedWorkspaceIds = Array.from(new Set([
+    normalizeWorkspaceId(sourceWorkspace.workspace_id),
+    ...(Array.isArray(options.excludeWorkspaceIds) ? options.excludeWorkspaceIds : []),
+  ].map(normalizeWorkspaceId).filter(Boolean)));
+
   const response = await fetch(`${getInternalBaseUrl()}/api/accounts/auto-invite`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       email,
       prefer_fresh_workspace: true,
-      exclude_account_ids: [Number(sourceWorkspace.account_id || 0)],
-      exclude_workspace_ids: [normalizeWorkspaceId(sourceWorkspace.workspace_id)],
+      exclude_account_ids: excludedAccountIds,
+      exclude_workspace_ids: excludedWorkspaceIds,
       preferred_account_id: Number(targetWorkspace.account_id || 0),
       preferred_workspace_id: normalizeWorkspaceId(targetWorkspace.workspace_id),
       preferred_workspace_name: String(targetWorkspace.workspace_name || ''),
@@ -352,8 +387,8 @@ async function rebalanceWorkspace(workspace) {
       continue;
     }
 
-    const targetWorkspace = findMigrationTarget(email, workspace);
-    if (!targetWorkspace) {
+    const targetWorkspaces = findMigrationTargets(email, workspace, 10);
+    if (targetWorkspaces.length === 0) {
       const removeResult = await workspaceMembers.removeMember(sourceAccount, member.user_id, {
         workspaceId: workspace.workspace_id,
         workspaceName: workspace.workspace_name,
@@ -407,21 +442,68 @@ async function rebalanceWorkspace(workspace) {
       continue;
     }
 
-    const inviteResult = await requestAutoInvite(email, workspace, targetWorkspace);
-    if (!inviteResult.success) {
+    let targetWorkspace = null;
+    let inviteResult = null;
+    const inviteFailures = [];
+    const failedWorkspaceIds = [];
+    const failedAccountIds = [];
+
+    for (const candidateWorkspace of targetWorkspaces) {
+      const candidateWorkspaceId = normalizeWorkspaceId(candidateWorkspace.workspace_id);
+      if (!candidateWorkspaceId || failedWorkspaceIds.includes(candidateWorkspaceId)) {
+        continue;
+      }
+
+      if (failedAccountIds.includes(Number(candidateWorkspace.account_id || 0))) {
+        continue;
+      }
+
+      const currentInviteResult = await requestAutoInvite(email, workspace, candidateWorkspace, {
+        excludeWorkspaceIds: failedWorkspaceIds,
+        excludeAccountIds: failedAccountIds,
+      });
+
+      if (currentInviteResult.success) {
+        targetWorkspace = candidateWorkspace;
+        inviteResult = currentInviteResult;
+        break;
+      }
+
+      const failure = {
+        message: currentInviteResult.message,
+        target_workspace_id: candidateWorkspace.workspace_id,
+        target_workspace_name: candidateWorkspace.workspace_name,
+        target_account_email: candidateWorkspace.account_email,
+      };
+      inviteFailures.push(failure);
+      failedWorkspaceIds.push(candidateWorkspaceId);
+      if (shouldSkipAccountAfterInviteFailure(currentInviteResult.message)) {
+        failedAccountIds.push(Number(candidateWorkspace.account_id || 0));
+      }
+
+      logAction(
+        sourceAccount.id,
+        'error',
+        `[overflow-rebalance] invite attempt ${email} to ${candidateWorkspace.account_email}/${candidateWorkspace.workspace_name || candidateWorkspace.workspace_id} failed: ${currentInviteResult.message}; trying next target workspace`
+      );
+    }
+
+    if (!inviteResult || !inviteResult.success) {
+      const lastFailure = inviteFailures[inviteFailures.length - 1] || {};
       failed += 1;
       items.push({
         email,
         status: 'failed',
         reason: 'invite_failed',
-        message: inviteResult.message,
-        target_workspace_id: targetWorkspace.workspace_id,
-        target_account_email: targetWorkspace.account_email,
+        message: formatMigrationInviteFailures(inviteFailures) || lastFailure.message || 'invite failed',
+        target_workspace_id: lastFailure.target_workspace_id || '',
+        target_workspace_name: lastFailure.target_workspace_name || '',
+        target_account_email: lastFailure.target_account_email || '',
       });
       logAction(
         sourceAccount.id,
         'error',
-        `[overflow-rebalance] invite ${email} to ${targetWorkspace.account_email}/${targetWorkspace.workspace_name || targetWorkspace.workspace_id} failed: ${inviteResult.message}`
+        `[overflow-rebalance] invite ${email} failed after trying ${inviteFailures.length} target workspace(s): ${formatMigrationInviteFailures(inviteFailures) || 'invite failed'}`
       );
       continue;
     }
