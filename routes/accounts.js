@@ -1508,6 +1508,28 @@ function clearInvitePauseState(accountId) {
   `).run(accountId);
 }
 
+function restoreInviteHealthForAccount(accountId) {
+  const restored = db.prepare(`
+    UPDATE invites
+    SET failure_category = CASE
+      WHEN failure_category = 'invite_not_materialized' THEN 'invite_not_materialized_restored'
+      WHEN failure_category = 'generic_error' THEN 'generic_error_restored'
+      WHEN failure_category = 'revoke_failed' THEN 'revoke_failed_restored'
+      WHEN failure_category = 'resend_failed' THEN 'resend_failed_restored'
+      ELSE failure_category
+    END
+    WHERE account_id = ?
+      AND failure_category IN ('invite_not_materialized', 'generic_error', 'revoke_failed', 'resend_failed')
+      AND updated_at >= datetime('now', '-${INVITE_FAILURE_WINDOW_HOURS} hours')
+  `).run(accountId);
+
+  clearInvitePauseState(accountId);
+
+  logInviteEvent(accountId, 'active', `[invite-health-restored] restored ${restored.changes} recent failure records`);
+
+  return restored.changes;
+}
+
 function logInviteAttempts(context, targetEmail, attempts = []) {
   const seen = new Set();
 
@@ -2112,6 +2134,28 @@ router.get('/invite-health', (req, res) => {
   });
 });
 
+router.post('/restore-invite-health', (req, res) => {
+  const accounts = db.prepare(`
+    SELECT ${ACCOUNT_INVITE_HEALTH_SELECT_SQL}
+    FROM accounts AS accounts
+    WHERE status = 'active'
+      AND access_token IS NOT NULL
+      AND access_token != ''
+      AND ${INVITE_HEALTH_STATUS_SQL} IN ('paused', 'degraded', 'warning')
+  `).all();
+
+  let restoredRecords = 0;
+  for (const account of accounts) {
+    restoredRecords += restoreInviteHealthForAccount(account.id);
+  }
+
+  return res.json({
+    message: `已修复 ${accounts.length} 个邀请状态异常账号`,
+    restoredAccounts: accounts.length,
+    restoredRecords,
+  });
+});
+
 router.post('/sync-quotas', async (req, res) => {
   try {
     const results = await quotaSync.syncAllAccountUsage();
@@ -2327,23 +2371,7 @@ router.post('/:id(\\d+)/restore-invite-health', (req, res) => {
     return res.status(404).json({ error: 'Account not found' });
   }
 
-  const restored = db.prepare(`
-    UPDATE invites
-    SET failure_category = CASE
-      WHEN failure_category = 'invite_not_materialized' THEN 'invite_not_materialized_restored'
-      WHEN failure_category = 'generic_error' THEN 'generic_error_restored'
-      WHEN failure_category = 'revoke_failed' THEN 'revoke_failed_restored'
-      WHEN failure_category = 'resend_failed' THEN 'resend_failed_restored'
-      ELSE failure_category
-    END
-    WHERE account_id = ?
-      AND failure_category IN ('invite_not_materialized', 'generic_error', 'revoke_failed', 'resend_failed')
-      AND updated_at >= datetime('now', '-${INVITE_FAILURE_WINDOW_HOURS} hours')
-  `).run(id);
-
-  clearInvitePauseState(id);
-
-  logInviteEvent(id, 'active', `[invite-health-restored] manually restored ${restored.changes} recent failure records`);
+  const restoredRecords = restoreInviteHealthForAccount(id);
 
   const diagnostics = getAccountInviteDiagnostics(id) || {
     id: account.id,
@@ -2360,7 +2388,7 @@ router.post('/:id(\\d+)/restore-invite-health', (req, res) => {
 
   return res.json({
     message: `已恢复 ${account.email} 的坏号状态`,
-    restored: restored.changes,
+    restored: restoredRecords,
     account: {
       ...diagnostics,
       diagnosis: buildInviteHealthDiagnosis(diagnostics),

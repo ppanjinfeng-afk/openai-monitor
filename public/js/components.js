@@ -990,15 +990,22 @@ const Components = {
         <td>${this.escapeHtml(`${account.recent_materialize_failures || 0} / ${account.recent_retry_failures || 0} / ${account.recent_invite_successes || 0}`)}</td>
         <td>${this.escapeHtml(this.timeAgo(account.last_invite_success_at || ''))}</td>
         <td>${this.escapeHtml(account.diagnosis || '')}</td>
+        <td>
+          <button class="member-inline-btn accent" onclick="App.restoreInviteHealth(${account.id})">修复</button>
+        </td>
       </tr>
     `).join('') : `
       <tr>
-        <td colspan="6" class="text-muted empty-cell">当前没有检测到账号数据</td>
+        <td colspan="7" class="text-muted empty-cell">当前没有检测到账号数据</td>
       </tr>
     `;
 
     return `
       <div class="quota-overview">${cards}</div>
+      <div class="filter-actions" style="justify-content: flex-end; margin: 12px 0;">
+        <button class="btn-secondary btn-tone-blue" onclick="App.openInviteHealthModal()">刷新检测</button>
+        <button class="btn-secondary btn-tone-warm" onclick="App.restoreAllInviteHealth()">一键修复邀请坏号</button>
+      </div>
       <div class="table-section">
         <table class="accounts-table">
           <thead>
@@ -1009,6 +1016,7 @@ const Components = {
               <th>异常/成功</th>
               <th>最近成功</th>
               <th>诊断</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>

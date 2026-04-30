@@ -540,8 +540,26 @@ const App = {
       const result = await API.restoreInviteHealth(id);
       this.toast(result.message || '已恢复邀请状态', 'success');
       await this.refreshAccountsSurface();
+      if (this.currentModalType === 'invite-health') {
+        await this.openInviteHealthModal();
+      }
     } catch (err) {
       this.toast(`恢复邀请状态失败: ${err.message}`, 'error');
+    }
+  },
+
+  async restoreAllInviteHealth() {
+    if (!confirm('确定要一键修复所有邀请坏号/待观察账号吗？系统会清掉近 24 小时的邀请异常计数，并解除自动暂停。')) {
+      return;
+    }
+
+    try {
+      const result = await API.restoreAllInviteHealth();
+      this.toast(result.message || '已批量恢复邀请状态', 'success');
+      await this.refreshAccountsSurface();
+      await this.openInviteHealthModal();
+    } catch (err) {
+      this.toast(`批量恢复邀请状态失败: ${err.message}`, 'error');
     }
   },
 

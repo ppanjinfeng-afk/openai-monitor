@@ -59,6 +59,12 @@ const API = {
     });
   },
 
+  restoreAllInviteHealth() {
+    return this.request('/api/accounts/restore-invite-health', {
+      method: 'POST',
+    });
+  },
+
   syncAllQuotas() {
     return this.request('/api/accounts/sync-quotas', {
       method: 'POST',
