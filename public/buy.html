@@ -2037,15 +2037,33 @@
     }
 
     async function request(url, options = {}) {
-      const res = await fetch(url, {
-        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-        ...options,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.error || `HTTP ${res.status}`);
+      const { timeoutMs = 0, headers = {}, signal, ...fetchOptions } = options;
+      const controller = timeoutMs > 0 && window.AbortController ? new AbortController() : null;
+      const timeoutId = controller
+        ? setTimeout(() => controller.abort(), timeoutMs)
+        : null;
+
+      try {
+        const res = await fetch(url, {
+          ...fetchOptions,
+          headers: { 'Content-Type': 'application/json', ...headers },
+          signal: signal || controller?.signal,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+        return data;
+      } catch (err) {
+        if (err?.name === 'AbortError') {
+          throw new Error('请求超时，请重新打开网页再试一次');
+        }
+        throw err;
+      } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
       }
-      return data;
     }
 
     function formatAmountText(amountCents, currency = 'CNY') {
@@ -2444,6 +2462,7 @@
       try {
         const data = await request('/api/payments/orders', {
           method: 'POST',
+          timeoutMs: 20000,
           body: JSON.stringify({
             buyer_email: buyerEmail,
             payment_method: paymentMethod,
@@ -2464,6 +2483,8 @@
           if (!popupOpened) {
             showNotice('订单已创建，浏览器拦截了支付弹窗，请点击下方“支付”按钮继续。');
           }
+        } else if (paymentWindow && !paymentWindow.closed) {
+          paymentWindow.close();
         }
       } catch (err) {
         if (paymentWindow && !paymentWindow.closed) {

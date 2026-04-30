@@ -18,6 +18,10 @@ const DEFAULT_CURRENCY = process.env.CDK_TEAM_CURRENCY || 'CNY';
 const SUPPORTED_METHODS = new Set(['alipay', 'mock']);
 const MAX_BATCH_ORDER_ITEMS = 20;
 const ORDER_TAIL_LENGTH = 4;
+const ORDER_INVENTORY_REFRESH_WAIT_MS = Math.max(
+  500,
+  Number.parseInt(process.env.ORDER_INVENTORY_REFRESH_WAIT_MS || '1500', 10) || 1500
+);
 
 function normalizeEmail(email) {
   return String(email || '')
@@ -201,6 +205,29 @@ function getOrderCreatedMessage(paymentMethod, payUrl, count = 1) {
   return count > 1
     ? `${createdText}，但支付链接模板未配置。可通过支付平台回调 /api/payments/webhook/generic 完成自动发码。`
     : '订单已创建，但支付链接模板未配置。可通过支付平台回调 /api/payments/webhook/generic 完成自动发码。';
+}
+
+async function ensureInventoryBeforeOrder(label = 'order') {
+  let timeoutId = null;
+  const timeoutPromise = new Promise(resolve => {
+    timeoutId = setTimeout(() => resolve({ timedOut: true }), ORDER_INVENTORY_REFRESH_WAIT_MS);
+  });
+
+  try {
+    const result = await Promise.race([ensureInventoryFreshness(), timeoutPromise]);
+    if (result?.timedOut) {
+      console.warn(
+        `[Payments] Inventory refresh before ${label} timed out after ${ORDER_INVENTORY_REFRESH_WAIT_MS}ms; continuing with current snapshot`
+      );
+      refreshInventoryInBackground();
+    }
+  } catch (err) {
+    console.error(`[Payments] Inventory refresh before ${label} failed:`, err.message);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
 }
 
 function getSubmittedOrderToken(req) {
@@ -642,9 +669,7 @@ router.post('/orders', async (req, res) => {
   }
 
   try {
-    await ensureInventoryFreshness().catch(err => {
-      console.error('[Payments] Inventory refresh before single order failed:', err.message);
-    });
+    await ensureInventoryBeforeOrder('single order');
 
     const order = createPendingOrder({
       buyerEmail,
@@ -703,9 +728,7 @@ router.post('/orders/batch', async (req, res) => {
   }
 
   try {
-    await ensureInventoryFreshness().catch(err => {
-      console.error('[Payments] Inventory refresh before batch order failed:', err.message);
-    });
+    await ensureInventoryBeforeOrder('batch order');
 
     const order = createPendingOrder({
       buyerEmail,
