@@ -6,6 +6,7 @@ const memberOverflowRebalance = require('../services/member-overflow-rebalance')
 const untrackedMemberCleanup = require('../services/untracked-member-cleanup');
 const { listAccountWorkspaces } = require('../services/account-workspaces');
 const { classifyFailure } = require('../services/failure-utils');
+const { completeCdkTeamTask } = require('../services/cdk-team-task-sync');
 
 const router = express.Router();
 const WORKSPACE_RESERVED_SEATS_SQL = `
@@ -2874,6 +2875,14 @@ router.post('/auto-invite', async (req, res) => {
       if (workspaceReservation) {
         releaseWorkspaceSlot(workspaceReservation);
         workspaceReservation = null;
+      }
+      const cdkTaskId = String(req.body.cdk_task_id || req.body.cdkTaskId || '').trim();
+      if (cdkTaskId) {
+        try {
+          completeCdkTeamTask(cdkTaskId, finalResult, { source: 'auto_invite_route_success' });
+        } catch (syncErr) {
+          console.error(`[CDK Team Sync] Failed to mark task ${cdkTaskId} as success:`, syncErr.message);
+        }
       }
       const postInviteSync = schedulePostInviteSync(usedAccount, finalResult, reusableInvite?.workspace_id);
 

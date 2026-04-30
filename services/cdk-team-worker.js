@@ -1,5 +1,9 @@
 const db = require('../db');
 const fetch = require('node-fetch');
+const {
+  completeCdkTeamTask,
+  reconcileCdkTeamTaskSuccess,
+} = require('./cdk-team-task-sync');
 
 const TEAM_INVITE_REQUEST_TIMEOUT_MS = Math.max(
   5000,
@@ -77,10 +81,47 @@ class CdkTeamWorker {
       this.completeTask(taskId, result);
     } catch (err) {
       console.error(`[CDK Team Worker] Task ${taskId} failed:`, err.message);
+      if (await this.tryReconcileBeforeFail(taskId, err.message)) {
+        return;
+      }
       this.failTask(taskId, err.message);
     } finally {
       this.processing.delete(taskId);
     }
+  }
+
+  shouldDelayReconcile(errorMessage) {
+    const message = String(errorMessage || '').toLowerCase();
+    return message.includes('timeout')
+      || message.includes('abort')
+      || message.includes('socket hang up')
+      || message.includes('超时')
+      || message.includes('超時');
+  }
+
+  async tryReconcileBeforeFail(taskId, errorMessage) {
+    const immediate = reconcileCdkTeamTaskSuccess(taskId, {
+      source: 'worker_failure_immediate_reconcile',
+    });
+    if (immediate.reconciled) {
+      console.log(`[CDK Team Worker] Task ${taskId} reconciled as success from invite record`);
+      return true;
+    }
+
+    if (!this.shouldDelayReconcile(errorMessage)) {
+      return false;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 15000));
+    const delayed = reconcileCdkTeamTaskSuccess(taskId, {
+      source: 'worker_failure_delayed_reconcile',
+    });
+    if (delayed.reconciled) {
+      console.log(`[CDK Team Worker] Task ${taskId} reconciled as success after delayed invite check`);
+      return true;
+    }
+
+    return false;
   }
 
   async sendAutoInvite(email, task = null) {
@@ -137,6 +178,9 @@ class CdkTeamWorker {
   }
 
   completeTask(taskId, inviteResult) {
+    completeCdkTeamTask(taskId, inviteResult, { source: 'worker_response' });
+    return;
+
     const task = db.prepare('SELECT * FROM cdk_tasks WHERE id = ?').get(taskId);
     if (!task) {
       return;
@@ -175,18 +219,22 @@ class CdkTeamWorker {
 
   failTask(taskId, errorMessage) {
     const task = db.prepare('SELECT * FROM cdk_tasks WHERE id = ?').get(taskId);
+    if (task?.status === 'SUCCESS') {
+      return;
+    }
 
     const fail = db.transaction(() => {
-      db.prepare(`
+      const taskResult = db.prepare(`
         UPDATE cdk_tasks
         SET status = 'FAILED',
             status_message = 'Team 邀请失败',
             error_message = ?,
             updated_at = datetime('now')
         WHERE id = ?
+          AND status != 'SUCCESS'
       `).run(errorMessage, taskId);
 
-      if (task?.cdk_id) {
+      if (taskResult.changes > 0 && task?.cdk_id) {
         db.prepare(`
           UPDATE cdk_cards
           SET status = 'unused',
