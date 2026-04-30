@@ -188,6 +188,22 @@ function buildUntrackedMemberQuery({ search = '' } = {}) {
         AND COALESCE(i.workspace_id, '') != ''
         AND COALESCE(i.status, '') IN ('sent', 'accepted')
         AND COALESCE(i.failure_category, '') = ''
+      UNION
+      SELECT DISTINCT email_key, workspace_key
+      FROM (
+        SELECT
+          LOWER(TRIM(t.account_email)) AS email_key,
+          COALESCE(
+            NULLIF(json_extract(t.invite_result_json, '$.workspace_id'), ''),
+            NULLIF(json_extract(t.invite_result_json, '$.workspaceId'), '')
+          ) AS workspace_key
+        FROM canonical_cdk_tasks t
+        WHERE COALESCE(t.account_email, '') != ''
+          AND COALESCE(t.invite_result_json, '') != ''
+          AND json_valid(t.invite_result_json)
+          AND COALESCE(json_extract(t.invite_result_json, '$.failure_category'), '') = ''
+      )
+      WHERE COALESCE(workspace_key, '') != ''
     )
   `;
 
