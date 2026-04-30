@@ -4,6 +4,9 @@ data/*.log
 data/*.sqlite
 data/*.sqlite-*
 data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*.db-journal
 data/monitor.db
 !data/.gitkeep
 
