@@ -235,6 +235,12 @@ ensureColumn('accounts', 'invite_pause_reason', "invite_pause_reason TEXT DEFAUL
 ensureColumn('accounts', 'invite_paused_at', 'invite_paused_at TEXT');
 ensureColumn('workspaces', 'invite_locked', 'invite_locked INTEGER DEFAULT 0');
 ensureColumn('workspaces', 'auto_invite_locked', 'auto_invite_locked INTEGER DEFAULT 0');
+ensureColumn('workspace_members', 'source_cdk_task_id', "source_cdk_task_id TEXT DEFAULT ''");
+ensureColumn('workspace_members', 'source_cdk_id', 'source_cdk_id INTEGER');
+ensureColumn('workspace_members', 'source_cdk_code', "source_cdk_code TEXT DEFAULT ''");
+ensureColumn('workspace_pending_invites', 'source_cdk_task_id', "source_cdk_task_id TEXT DEFAULT ''");
+ensureColumn('workspace_pending_invites', 'source_cdk_id', 'source_cdk_id INTEGER');
+ensureColumn('workspace_pending_invites', 'source_cdk_code', "source_cdk_code TEXT DEFAULT ''");
 ensureColumn('cdk_cards', 'buyer_email', "buyer_email TEXT DEFAULT ''");
 ensureColumn('cdk_cards', 'source_order_no', "source_order_no TEXT DEFAULT ''");
 ensureColumn('cdk_tasks', 'task_type', "task_type TEXT DEFAULT 'plus_checkout'");
@@ -286,8 +292,10 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_workspaces_workspace_id ON workspaces(workspace_id);
   CREATE INDEX IF NOT EXISTS idx_workspace_members_email ON workspace_members(email);
   CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace ON workspace_members(workspace_id);
+  CREATE INDEX IF NOT EXISTS idx_workspace_members_source_task ON workspace_members(source_cdk_task_id);
   CREATE INDEX IF NOT EXISTS idx_workspace_pending_email ON workspace_pending_invites(email);
   CREATE INDEX IF NOT EXISTS idx_workspace_pending_workspace ON workspace_pending_invites(workspace_id);
+  CREATE INDEX IF NOT EXISTS idx_workspace_pending_source_task ON workspace_pending_invites(source_cdk_task_id);
   CREATE INDEX IF NOT EXISTS idx_checkout_tools_session_id ON checkout_tools_history(session_id);
   CREATE INDEX IF NOT EXISTS idx_checkout_tools_created_at ON checkout_tools_history(created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_cdk_cards_code ON cdk_cards(code);

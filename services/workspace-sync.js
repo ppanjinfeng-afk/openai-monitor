@@ -1,6 +1,7 @@
 const db = require('../db');
 const { withBrowserPage } = require('./browser');
 const { listAccountWorkspaces } = require('./account-workspaces');
+const { findStrictCdkSourceForWorkspaceEmail } = require('./cdk-source');
 const WORKSPACE_MEMBER_LIMIT = 8;
 
 function sleep(ms) {
@@ -420,13 +421,21 @@ function replaceWorkspaceMembers(account, workspaceId, members) {
       is_owner,
       deactivated_time,
       joined_at,
+      source_cdk_task_id,
+      source_cdk_id,
+      source_cdk_code,
       last_synced_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const transact = db.transaction(() => {
     remove.run(account.id, workspaceId);
     for (const member of members) {
+      const source = findStrictCdkSourceForWorkspaceEmail({
+        workspaceId,
+        email: member.email,
+      });
+
       insert.run(
         account.id,
         workspaceId,
@@ -439,6 +448,9 @@ function replaceWorkspaceMembers(account, workspaceId, members) {
         member.is_owner ? 1 : 0,
         member.deactivated_time || '',
         member.joined_at || '',
+        source?.source_cdk_task_id || '',
+        source?.source_cdk_id ?? null,
+        source?.source_cdk_code || '',
         nowIso()
       );
     }
@@ -460,19 +472,31 @@ function replaceWorkspacePendingInvites(account, workspaceId, pendingInvites) {
       remote_invite_id,
       email,
       invited_at,
+      source_cdk_task_id,
+      source_cdk_id,
+      source_cdk_code,
       last_synced_at
-    ) VALUES (?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const transact = db.transaction(() => {
     remove.run(account.id, workspaceId);
     for (const invite of pendingInvites) {
+      const source = findStrictCdkSourceForWorkspaceEmail({
+        workspaceId,
+        email: invite.email,
+        remoteInviteId: invite.remote_invite_id,
+      });
+
       insert.run(
         account.id,
         workspaceId,
         invite.remote_invite_id || '',
         invite.email || '',
         invite.invited_at || '',
+        source?.source_cdk_task_id || '',
+        source?.source_cdk_id ?? null,
+        source?.source_cdk_code || '',
         nowIso()
       );
     }
@@ -687,9 +711,9 @@ async function syncAccountWorkspacesWithPage(page, account) {
     }
 
     const workspaceRow = upsertWorkspace(account, workspace, snapshot);
+    reconcileInviteRecords(account, workspace.id, snapshot);
     replaceWorkspaceMembers(account, workspace.id, snapshot.members || []);
     replaceWorkspacePendingInvites(account, workspace.id, snapshot.pendingInvites || []);
-    reconcileInviteRecords(account, workspace.id, snapshot);
 
     results.push({
       success: true,

@@ -147,17 +147,26 @@ function markDuplicateTeamCdkTaskUntracked(task, canonicalTask, options = {}) {
 
 function loadDuplicateSuccessGroups() {
   return db.prepare(`
+    WITH task_sources AS (
+      SELECT
+        t.*,
+        COALESCE(NULLIF(TRIM(t.cdk_code), ''), c.code, '') AS normalized_cdk_code
+      FROM cdk_tasks t
+      LEFT JOIN cdk_cards c ON c.id = t.cdk_id
+      WHERE t.task_type = 'team_invite'
+        AND t.status = 'SUCCESS'
+        AND (t.cdk_id IS NOT NULL OR COALESCE(TRIM(t.cdk_code), '') != '' OR COALESCE(c.code, '') != '')
+    )
     SELECT group_key, COUNT(*) AS success_count
     FROM (
       SELECT
-        CASE
-          WHEN cdk_id IS NOT NULL THEN 'id:' || cdk_id
-          ELSE 'code:' || TRIM(cdk_code)
-        END AS group_key
-      FROM cdk_tasks
-      WHERE task_type = 'team_invite'
-        AND status = 'SUCCESS'
-        AND (cdk_id IS NOT NULL OR COALESCE(TRIM(cdk_code), '') != '')
+        'id:' || cdk_id AS group_key
+      FROM task_sources
+      WHERE cdk_id IS NOT NULL
+      UNION ALL
+      SELECT 'code:' || LOWER(TRIM(normalized_cdk_code)) AS group_key
+      FROM task_sources
+      WHERE COALESCE(TRIM(normalized_cdk_code), '') != ''
     )
     GROUP BY group_key
     HAVING COUNT(*) > 1
@@ -183,12 +192,12 @@ function loadSuccessTasksForGroup(groupKey) {
 
   const code = key.startsWith('code:') ? key.slice(5) : key;
   return db.prepare(`
-    SELECT *
-    FROM cdk_tasks
-    WHERE task_type = 'team_invite'
-      AND status = 'SUCCESS'
-      AND cdk_id IS NULL
-      AND TRIM(cdk_code) = ?
+    SELECT t.*
+    FROM cdk_tasks t
+    LEFT JOIN cdk_cards c ON c.id = t.cdk_id
+    WHERE t.task_type = 'team_invite'
+      AND t.status = 'SUCCESS'
+      AND LOWER(TRIM(COALESCE(NULLIF(TRIM(t.cdk_code), ''), c.code, ''))) = ?
     ORDER BY datetime(COALESCE(NULLIF(completed_at, ''), updated_at, created_at)) ASC,
              datetime(created_at) ASC,
              id ASC

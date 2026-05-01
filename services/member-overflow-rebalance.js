@@ -319,6 +319,8 @@ async function requestAutoInvite(email, sourceWorkspace, targetWorkspace, option
       preferred_workspace_name: String(targetWorkspace.workspace_name || ''),
       allow_preferred_workspace_fallback: true,
       rebalance_reason: 'overflow_member',
+      cdk_task_id: String(options.cdkTaskId || ''),
+      cdk_code: String(options.cdkCode || ''),
     }),
   });
 
@@ -496,6 +498,8 @@ async function rebalanceWorkspace(workspace) {
       const currentInviteResult = await requestAutoInvite(email, workspace, candidateWorkspace, {
         excludeWorkspaceIds: failedWorkspaceIds,
         excludeAccountIds: failedAccountIds,
+        cdkTaskId: member.source_cdk_task_id || '',
+        cdkCode: member.source_cdk_code || '',
       });
 
       if (currentInviteResult.success) {

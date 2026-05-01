@@ -1,6 +1,7 @@
 const db = require('../db');
 const workspaceMembers = require('./workspace-members');
 const workspaceSync = require('./workspace-sync');
+const { canonicalCdkTasksCte } = require('./cdk-source');
 
 const SETTING_KEY = 'untracked_members_auto_kick_enabled';
 const DEFAULT_LIMIT = 100;
@@ -98,6 +99,9 @@ function buildUntrackedMemberQuery({ search = '' } = {}) {
         wm.joined_at,
         '' AS invited_at,
         '' AS remote_invite_id,
+        wm.source_cdk_task_id,
+        wm.source_cdk_id,
+        wm.source_cdk_code,
         wm.last_synced_at
       FROM workspace_members wm
       JOIN workspaces w ON w.workspace_id = wm.workspace_id AND w.account_id = wm.account_id
@@ -131,6 +135,9 @@ function buildUntrackedMemberQuery({ search = '' } = {}) {
         '' AS joined_at,
         wp.invited_at,
         wp.remote_invite_id,
+        wp.source_cdk_task_id,
+        wp.source_cdk_id,
+        wp.source_cdk_code,
         wp.last_synced_at
       FROM workspace_pending_invites wp
       JOIN workspaces w ON w.workspace_id = wp.workspace_id AND w.account_id = wp.account_id
@@ -140,42 +147,7 @@ function buildUntrackedMemberQuery({ search = '' } = {}) {
         AND a.access_token != ''
         AND COALESCE(wp.email, '') != ''
     ),
-    canonical_cdk_tasks AS (
-      SELECT t.*
-      FROM cdk_tasks t
-      WHERE t.task_type = 'team_invite'
-        AND t.status = 'SUCCESS'
-        AND (t.cdk_id IS NOT NULL OR COALESCE(TRIM(t.cdk_code), '') != '')
-        AND NOT EXISTS (
-          SELECT 1
-          FROM cdk_tasks earlier
-          WHERE earlier.task_type = 'team_invite'
-            AND earlier.status = 'SUCCESS'
-            AND (
-              (t.cdk_id IS NOT NULL AND earlier.cdk_id = t.cdk_id)
-              OR (
-                t.cdk_id IS NULL
-                AND earlier.cdk_id IS NULL
-                AND TRIM(earlier.cdk_code) = TRIM(t.cdk_code)
-              )
-            )
-            AND (
-              datetime(COALESCE(NULLIF(earlier.completed_at, ''), earlier.updated_at, earlier.created_at))
-                < datetime(COALESCE(NULLIF(t.completed_at, ''), t.updated_at, t.created_at))
-              OR (
-                datetime(COALESCE(NULLIF(earlier.completed_at, ''), earlier.updated_at, earlier.created_at))
-                  = datetime(COALESCE(NULLIF(t.completed_at, ''), t.updated_at, t.created_at))
-                AND datetime(earlier.created_at) < datetime(t.created_at)
-              )
-              OR (
-                datetime(COALESCE(NULLIF(earlier.completed_at, ''), earlier.updated_at, earlier.created_at))
-                  = datetime(COALESCE(NULLIF(t.completed_at, ''), t.updated_at, t.created_at))
-                AND datetime(earlier.created_at) = datetime(t.created_at)
-                AND earlier.id < t.id
-              )
-            )
-        )
-    ),
+    ${canonicalCdkTasksCte},
     raw_cdk_sources AS (
       SELECT DISTINCT
         t.id AS task_id,
@@ -215,64 +187,9 @@ function buildUntrackedMemberQuery({ search = '' } = {}) {
       WHERE COALESCE(email_key, '') != ''
         AND COALESCE(workspace_key, '') != ''
     ),
-    exact_matched_cdk_tasks AS (
-      SELECT DISTINCT s.task_id
-      FROM exact_cdk_sources s
-      JOIN untracked_items m
-        ON m.email_key = s.email_key
-        AND m.workspace_id = s.workspace_key
-    ),
-    ranked_unmatched_items AS (
-      SELECT
-        m.email_key,
-        m.workspace_id AS workspace_key,
-        ROW_NUMBER() OVER (
-          PARTITION BY m.email_key
-          ORDER BY datetime(COALESCE(NULLIF(m.joined_at, ''), NULLIF(m.invited_at, ''), m.last_synced_at)),
-            m.workspace_id,
-            m.item_type,
-            m.id
-        ) AS source_rank
-      FROM untracked_items m
-      LEFT JOIN exact_cdk_sources s
-        ON s.email_key = m.email_key
-        AND s.workspace_key = m.workspace_id
-      WHERE s.task_id IS NULL
-    ),
-    ranked_remaining_cdk_tasks AS (
-      SELECT
-        task_sources.email_key,
-        task_sources.task_id,
-        ROW_NUMBER() OVER (
-          PARTITION BY task_sources.email_key
-          ORDER BY datetime(task_sources.source_at), task_sources.task_id
-        ) AS source_rank
-      FROM (
-        SELECT
-          s.email_key,
-          s.task_id,
-          MIN(s.source_at) AS source_at
-        FROM raw_cdk_sources s
-        WHERE COALESCE(s.email_key, '') != ''
-          AND NOT EXISTS (
-            SELECT 1
-            FROM exact_matched_cdk_tasks matched
-            WHERE matched.task_id = s.task_id
-          )
-        GROUP BY s.email_key, s.task_id
-      ) task_sources
-    ),
     known_cdk_sources AS (
       SELECT DISTINCT email_key, workspace_key
       FROM exact_cdk_sources
-      UNION
-      SELECT DISTINCT
-        m.email_key,
-        m.workspace_key
-      FROM ranked_unmatched_items m
-      JOIN ranked_remaining_cdk_tasks t
-        ON t.email_key = m.email_key
-        AND t.source_rank = m.source_rank
     )
   `;
 

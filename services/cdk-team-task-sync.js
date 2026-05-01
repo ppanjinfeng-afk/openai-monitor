@@ -93,39 +93,39 @@ function findSuccessfulInviteForTask(taskOrId) {
 }
 
 function findFirstSuccessfulTaskForSameCdk(task) {
-  if (task.cdk_id) {
-    return db.prepare(`
-      SELECT *
-      FROM cdk_tasks
-      WHERE cdk_id = ?
-        AND task_type = 'team_invite'
-        AND status = 'SUCCESS'
-        AND id != ?
-      ORDER BY datetime(COALESCE(NULLIF(completed_at, ''), updated_at, created_at)) ASC,
-               datetime(created_at) ASC,
-               id ASC
-      LIMIT 1
-    `).get(task.cdk_id, task.id);
+  let cdkCode = normalizeText(task.cdk_code);
+  if (!cdkCode && task.cdk_id) {
+    const card = db.prepare('SELECT code FROM cdk_cards WHERE id = ?').get(task.cdk_id);
+    cdkCode = normalizeText(card?.code);
   }
 
-  const cdkCode = normalizeText(task.cdk_code);
-  if (!cdkCode) {
+  if (!task.cdk_id && !cdkCode) {
     return null;
   }
 
   return db.prepare(`
-    SELECT *
-    FROM cdk_tasks
-    WHERE cdk_id IS NULL
-      AND TRIM(cdk_code) = ?
-      AND task_type = 'team_invite'
-      AND status = 'SUCCESS'
-      AND id != ?
+    SELECT existing.*
+    FROM cdk_tasks existing
+    LEFT JOIN cdk_cards existing_card ON existing_card.id = existing.cdk_id
+    WHERE existing.task_type = 'team_invite'
+      AND existing.status = 'SUCCESS'
+      AND existing.id != @taskId
+      AND (
+        (@cdkId IS NOT NULL AND existing.cdk_id = @cdkId)
+        OR (
+          @cdkCode != ''
+          AND LOWER(TRIM(COALESCE(NULLIF(TRIM(existing.cdk_code), ''), existing_card.code, ''))) = LOWER(TRIM(@cdkCode))
+        )
+      )
     ORDER BY datetime(COALESCE(NULLIF(completed_at, ''), updated_at, created_at)) ASC,
              datetime(created_at) ASC,
              id ASC
     LIMIT 1
-  `).get(cdkCode, task.id);
+  `).get({
+    taskId: task.id,
+    cdkId: task.cdk_id ?? null,
+    cdkCode,
+  });
 }
 
 function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
