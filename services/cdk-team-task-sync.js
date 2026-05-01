@@ -274,7 +274,8 @@ function bindTaskSourceToWorkspaceRows(task = {}, inviteResult = {}) {
         WHERE LOWER(email) = LOWER(?)
           AND COALESCE(remote_invite_id, '') = ?
           AND (COALESCE(source_cdk_task_id, '') = '' OR source_cdk_task_id = ?)
-        ORDER BY datetime(COALESCE(NULLIF(last_synced_at, ''), invited_at, created_at)) DESC
+        ORDER BY datetime(COALESCE(NULLIF(last_synced_at, ''), NULLIF(invited_at, ''), '1970-01-01 00:00:00')) DESC,
+                 rowid DESC
         LIMIT 2
       `).all(targetEmail, remoteInviteId, source.source_cdk_task_id);
 
