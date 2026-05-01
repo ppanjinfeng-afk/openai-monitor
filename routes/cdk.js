@@ -842,6 +842,8 @@ router.get('/query/:taskId', (req, res) => {
  * GET /api/cdk/tasks — List recent tasks (admin)
  */
 router.get('/tasks', (req, res) => {
+  runCdkMaintenanceSafely('tasks');
+
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const offset = (page - 1) * limit;

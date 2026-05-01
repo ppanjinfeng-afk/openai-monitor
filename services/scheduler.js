@@ -11,6 +11,7 @@ const telegram = require('./telegram');
 
 let checkTask = null;
 let memberCleanupTask = null;
+let cdkTimeoutTask = null;
 let dailySummaryTask = null;
 let checkCycleRunning = false;
 let memberCleanupRunning = false;
@@ -90,6 +91,16 @@ async function runMemberCleanupCycle(trigger = 'manual') {
   }
 }
 
+function runCdkTimeoutRelease(trigger = 'manual') {
+  try {
+    releaseStaleProcessingCdks({ log: true });
+    return true;
+  } catch (err) {
+    console.error(`[Scheduler] ${trigger} CDK timeout release failed:`, err.message);
+    return false;
+  }
+}
+
 function startScheduler() {
   const intervalMinutes = getInterval();
 
@@ -115,6 +126,16 @@ function startScheduler() {
   });
 
   console.log(`[Scheduler] Member cleanup scheduled every ${memberCleanupIntervalMinutes} minutes`);
+
+  if (cdkTimeoutTask) {
+    cdkTimeoutTask.stop();
+  }
+
+  cdkTimeoutTask = cron.schedule('* * * * *', () => {
+    runCdkTimeoutRelease('periodic');
+  });
+
+  console.log('[Scheduler] CDK processing timeout release scheduled every 1 minute');
 
   setTimeout(async () => {
     console.log('[Scheduler] Running initial full check');
@@ -159,6 +180,10 @@ function stopScheduler() {
     memberCleanupTask.stop();
     memberCleanupTask = null;
   }
+  if (cdkTimeoutTask) {
+    cdkTimeoutTask.stop();
+    cdkTimeoutTask = null;
+  }
   if (dailySummaryTask) {
     dailySummaryTask.stop();
     dailySummaryTask = null;
@@ -172,4 +197,5 @@ module.exports = {
   stopScheduler,
   runCheckCycle,
   runMemberCleanupCycle,
+  runCdkTimeoutRelease,
 };
