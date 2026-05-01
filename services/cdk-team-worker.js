@@ -141,6 +141,7 @@ class CdkTeamWorker {
           email,
           prefer_fresh_workspace: true,
           cdk_task_id: task?.id || '',
+          cdk_id: task?.cdk_id || '',
           cdk_code: task?.cdk_code || '',
         }),
         signal: controller.signal,

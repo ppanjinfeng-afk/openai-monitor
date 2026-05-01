@@ -74,22 +74,7 @@ function findSuccessfulInviteForTask(taskOrId) {
     return linkedInvite;
   }
 
-  return db.prepare(`
-    SELECT
-      i.*,
-      a.email AS account_email,
-      a.label AS account_label
-    FROM invites i
-    LEFT JOIN accounts a ON a.id = i.account_id
-    WHERE LOWER(i.target_email) = LOWER(?)
-      AND (COALESCE(i.cdk_task_id, '') = '' OR i.cdk_task_id = ?)
-      AND COALESCE(i.status, '') IN ('sent', 'accepted')
-      AND COALESCE(i.failure_category, '') = ''
-      AND datetime(COALESCE(NULLIF(i.updated_at, ''), i.created_at))
-          >= datetime(COALESCE(NULLIF(?, ''), 'now'), '-15 minutes')
-    ORDER BY datetime(COALESCE(NULLIF(i.updated_at, ''), i.created_at)) DESC
-    LIMIT 1
-  `).get(targetEmail, task.id, task.created_at || task.updated_at || '');
+  return null;
 }
 
 function findFirstSuccessfulTaskForSameCdk(task) {
@@ -215,25 +200,49 @@ function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
         SET cdk_task_id = ?,
             updated_at = datetime('now')
         WHERE id = ?
-      `).run(normalizedTaskId, inviteId);
+          AND LOWER(target_email) = LOWER(?)
+          AND (COALESCE(cdk_task_id, '') = '' OR cdk_task_id = ?)
+      `).run(normalizedTaskId, inviteId, targetEmail, normalizedTaskId);
     } else if (remoteInviteId) {
-      db.prepare(`
-        UPDATE invites
-        SET cdk_task_id = ?,
-            updated_at = datetime('now')
+      const matches = db.prepare(`
+        SELECT id
+        FROM invites
         WHERE remote_invite_id = ?
-          AND COALESCE(cdk_task_id, '') = ''
-      `).run(normalizedTaskId, remoteInviteId);
+          AND LOWER(target_email) = LOWER(?)
+          AND COALESCE(status, '') IN ('sent', 'accepted')
+          AND (COALESCE(cdk_task_id, '') = '' OR cdk_task_id = ?)
+        ORDER BY datetime(COALESCE(NULLIF(updated_at, ''), created_at)) DESC
+        LIMIT 2
+      `).all(remoteInviteId, targetEmail, normalizedTaskId);
+
+      if (matches.length === 1) {
+        db.prepare(`
+          UPDATE invites
+          SET cdk_task_id = ?,
+              updated_at = datetime('now')
+          WHERE id = ?
+        `).run(normalizedTaskId, matches[0].id);
+      }
     } else if (workspaceId && targetEmail) {
-      db.prepare(`
-        UPDATE invites
-        SET cdk_task_id = ?,
-            updated_at = datetime('now')
+      const matches = db.prepare(`
+        SELECT id
+        FROM invites
         WHERE workspace_id = ?
           AND LOWER(target_email) = LOWER(?)
           AND COALESCE(status, '') IN ('sent', 'accepted')
           AND COALESCE(cdk_task_id, '') = ''
-      `).run(normalizedTaskId, workspaceId, targetEmail);
+        ORDER BY datetime(COALESCE(NULLIF(updated_at, ''), created_at)) DESC
+        LIMIT 2
+      `).all(workspaceId, targetEmail);
+
+      if (matches.length === 1) {
+        db.prepare(`
+          UPDATE invites
+          SET cdk_task_id = ?,
+              updated_at = datetime('now')
+          WHERE id = ?
+        `).run(normalizedTaskId, matches[0].id);
+      }
     }
   });
 

@@ -1588,18 +1588,34 @@ function buildInviteHealthDiagnosis(account) {
 function persistInviteSuccess(account, targetEmail, result) {
   const workspaceId = normalizeWorkspaceId(result.workspace_id || result.workspaceId || '');
   const workspaceName = normalizeWorkspaceName(result.workspace_name || result.workspaceName || '');
-  const existing = findInviteRecord(account.id, targetEmail, workspaceId);
   const requestedAccountId = result.requested_account_id || account.id;
   const fallbackFromAccountId = result.fallback_from_account_id || null;
   const remoteInviteId = result.remote_invite_id || '';
   const deliveryType = result.delivery_type || (result.wasResend ? 'resend' : 'send');
   const failureCategory = result.failure_category || '';
   const cdkTaskId = String(result.cdk_task_id || result.cdkTaskId || '').trim();
+  const normalizedTargetEmail = normalizeEmail(targetEmail);
+  const existingForTask = cdkTaskId
+    ? db.prepare(`
+      SELECT *
+      FROM invites
+      WHERE account_id = ?
+        AND LOWER(target_email) = LOWER(?)
+        AND COALESCE(workspace_id, '') = ?
+        AND cdk_task_id = ?
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `).get(account.id, normalizedTargetEmail, workspaceId, cdkTaskId)
+    : null;
+  const latestExisting = findInviteRecord(account.id, normalizedTargetEmail, workspaceId);
+  const existing = existingForTask || latestExisting;
+  const existingTaskId = String(existing?.cdk_task_id || '').trim();
+  const shouldInsertSeparateRecord = Boolean(existing && cdkTaskId && existingTaskId && existingTaskId !== cdkTaskId);
 
-  if (!existing) {
+  if (!existing || shouldInsertSeparateRecord) {
     db.prepare(`UPDATE accounts SET updated_at = datetime('now') WHERE id = ?`).run(account.id);
 
-    db.prepare(`
+    const insertInfo = db.prepare(`
       INSERT INTO invites (
         account_id,
         requested_account_id,
@@ -1615,6 +1631,9 @@ function persistInviteSuccess(account, targetEmail, result) {
         cdk_task_id
       ) VALUES (?, ?, ?, ?, 'sent', ?, ?, ?, ?, ?, ?, ?)
     `).run(account.id, requestedAccountId, fallbackFromAccountId, targetEmail, result.message, remoteInviteId, deliveryType, workspaceId, workspaceName, failureCategory, cdkTaskId);
+
+    result.invite_id = Number(insertInfo.lastInsertRowid);
+    result.inviteId = result.invite_id;
   } else {
     db.prepare(`
       UPDATE invites
@@ -1628,13 +1647,19 @@ function persistInviteSuccess(account, targetEmail, result) {
           workspace_id = ?,
           workspace_name = ?,
           failure_category = ?,
-          cdk_task_id = CASE WHEN ? != '' THEN ? ELSE cdk_task_id END
+          cdk_task_id = CASE
+            WHEN ? != '' AND COALESCE(cdk_task_id, '') = '' THEN ?
+            ELSE cdk_task_id
+          END
       WHERE id = ?
     `).run(result.message, requestedAccountId, fallbackFromAccountId, remoteInviteId, deliveryType, workspaceId, workspaceName, failureCategory, cdkTaskId, cdkTaskId, existing.id);
     db.prepare(`UPDATE accounts SET updated_at = datetime('now') WHERE id = ?`).run(account.id);
+
+    result.invite_id = existing.id;
+    result.inviteId = existing.id;
   }
 
-  return existing;
+  return shouldInsertSeparateRecord ? null : existing;
 }
 
 function logInviteEvent(accountId, status, message) {
