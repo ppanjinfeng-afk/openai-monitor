@@ -113,6 +113,106 @@ function findFirstSuccessfulTaskForSameCdk(task) {
   });
 }
 
+function getTaskCdkCode(task = {}) {
+  let cdkCode = normalizeText(task.cdk_code);
+  if (!cdkCode && task.cdk_id) {
+    const card = db.prepare('SELECT code FROM cdk_cards WHERE id = ?').get(task.cdk_id);
+    cdkCode = normalizeText(card?.code);
+  }
+  return cdkCode;
+}
+
+function buildTaskSourceIdentity(task = {}) {
+  const taskId = normalizeText(task.id);
+  const cdkCode = getTaskCdkCode(task);
+  const cdkId = task.cdk_id == null ? null : Number(task.cdk_id);
+
+  if (!taskId || (!cdkId && !cdkCode)) {
+    return null;
+  }
+
+  return {
+    source_cdk_task_id: taskId,
+    source_cdk_id: cdkId || null,
+    source_cdk_code: cdkCode,
+  };
+}
+
+function bindTaskSourceToWorkspaceRows(task = {}, inviteResult = {}) {
+  const source = buildTaskSourceIdentity(task);
+  if (!source) {
+    return { pendingUpdated: 0, membersUpdated: 0 };
+  }
+
+  const workspaceId = normalizeText(inviteResult.workspace_id || inviteResult.workspaceId);
+  const targetEmail = normalizeEmail(task.account_email || inviteResult.email || inviteResult.target_email);
+  const remoteInviteId = normalizeText(inviteResult.remote_invite_id || inviteResult.remoteInviteId);
+
+  if (!workspaceId || !targetEmail) {
+    return { pendingUpdated: 0, membersUpdated: 0 };
+  }
+
+  let pendingUpdated = 0;
+  if (remoteInviteId) {
+    pendingUpdated = db.prepare(`
+      UPDATE workspace_pending_invites
+      SET source_cdk_task_id = ?,
+          source_cdk_id = ?,
+          source_cdk_code = ?,
+          last_synced_at = COALESCE(last_synced_at, datetime('now'))
+      WHERE workspace_id = ?
+        AND LOWER(email) = LOWER(?)
+        AND COALESCE(remote_invite_id, '') = ?
+    `).run(
+      source.source_cdk_task_id,
+      source.source_cdk_id,
+      source.source_cdk_code,
+      workspaceId,
+      targetEmail,
+      remoteInviteId
+    ).changes;
+  } else {
+    pendingUpdated = db.prepare(`
+      UPDATE workspace_pending_invites
+      SET source_cdk_task_id = ?,
+          source_cdk_id = ?,
+          source_cdk_code = ?,
+          last_synced_at = COALESCE(last_synced_at, datetime('now'))
+      WHERE workspace_id = ?
+        AND LOWER(email) = LOWER(?)
+        AND (COALESCE(source_cdk_task_id, '') = '' OR source_cdk_task_id = ?)
+    `).run(
+      source.source_cdk_task_id,
+      source.source_cdk_id,
+      source.source_cdk_code,
+      workspaceId,
+      targetEmail,
+      source.source_cdk_task_id
+    ).changes;
+  }
+
+  const membersUpdated = db.prepare(`
+    UPDATE workspace_members
+    SET source_cdk_task_id = ?,
+        source_cdk_id = ?,
+        source_cdk_code = ?,
+        last_synced_at = COALESCE(last_synced_at, datetime('now'))
+    WHERE workspace_id = ?
+      AND LOWER(email) = LOWER(?)
+      AND COALESCE(deactivated_time, '') = ''
+      AND (COALESCE(source_cdk_task_id, '') = '' OR source_cdk_task_id = ?)
+  `).run(
+    source.source_cdk_task_id,
+    source.source_cdk_id,
+    source.source_cdk_code,
+    workspaceId,
+    targetEmail,
+    source.source_cdk_task_id
+  ).changes;
+
+  return { pendingUpdated, membersUpdated };
+}
+
 function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
   const normalizedTaskId = normalizeText(taskId);
   if (!normalizedTaskId) {
@@ -156,6 +256,7 @@ function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
     ...parseJsonSafely(task.invite_result_json),
     ...inviteResult,
     success: true,
+    ...buildTaskSourceIdentity(task),
     cdk_task_sync_source: options.source || 'unknown',
     cdk_task_synced_at: new Date().toISOString(),
   };
@@ -244,6 +345,8 @@ function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
         `).run(normalizedTaskId, matches[0].id);
       }
     }
+
+    bindTaskSourceToWorkspaceRows(task, result);
   });
 
   complete();

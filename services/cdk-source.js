@@ -218,19 +218,6 @@ function loadStrictCdkSourcesForEmails(emails = []) {
           NULLIF(json_extract(t.invite_result_json, '$.workspaceId'), '')
         ) != ''
 
-      UNION ALL
-
-      SELECT
-        t.id AS source_cdk_task_id,
-        t.cdk_id AS source_cdk_id,
-        t.normalized_cdk_code AS source_cdk_code,
-        LOWER(TRIM(t.account_email)) AS email_key,
-        '' AS workspace_key,
-        '' AS remote_invite_id,
-        3 AS source_priority,
-        datetime(COALESCE(NULLIF(t.completed_at, ''), t.updated_at, t.created_at)) AS source_at
-      FROM canonical_cdk_tasks t
-      WHERE COALESCE(t.account_email, '') != ''
     )
     SELECT *
     FROM candidate_sources
@@ -335,8 +322,10 @@ function buildStrictCdkSourceAssignments(rows = []) {
     }
   }
 
+  // A CDK source is only valid for the workspace it actually invited into.
+  // Do not fall back by email globally, otherwise old CDK records can be bound to
+  // a later invite in another workspace.
   assignPass(sortedSources.filter(source => normalizeWorkspaceId(source.workspace_key)), true);
-  assignPass(sortedSources, false);
 
   return assignments;
 }
