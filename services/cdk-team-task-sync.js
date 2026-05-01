@@ -213,6 +213,24 @@ function bindTaskSourceToWorkspaceRows(task = {}, inviteResult = {}) {
   return { pendingUpdated, membersUpdated };
 }
 
+function safelyBindTaskSourceToWorkspaceRows(task = {}, inviteResult = {}, options = {}) {
+  try {
+    return bindTaskSourceToWorkspaceRows(task, inviteResult);
+  } catch (err) {
+    const taskId = normalizeText(task.id || inviteResult.cdk_task_id || inviteResult.cdkTaskId);
+    const source = normalizeText(options.source);
+    console.error(
+      `[CDK Team Sync] Source binding failed${taskId ? ` for task ${taskId}` : ''}${source ? ` (${source})` : ''}:`,
+      err.message
+    );
+    return {
+      pendingUpdated: 0,
+      membersUpdated: 0,
+      error: err.message,
+    };
+  }
+}
+
 function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
   const normalizedTaskId = normalizeText(taskId);
   if (!normalizedTaskId) {
@@ -229,11 +247,19 @@ function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
   }
 
   if (normalizeText(task.status).toUpperCase() === 'SUCCESS') {
+    const existingInviteResult = parseJsonSafely(task.invite_result_json);
+    const sourceBinding = safelyBindTaskSourceToWorkspaceRows(
+      task,
+      { ...existingInviteResult, ...inviteResult },
+      { source: options.source || 'already_success' }
+    );
+
     return {
       completed: true,
       alreadyCompleted: true,
       task,
-      inviteResult: parseJsonSafely(task.invite_result_json),
+      inviteResult: existingInviteResult,
+      sourceBinding,
     };
   }
 
@@ -346,15 +372,18 @@ function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
       }
     }
 
-    bindTaskSourceToWorkspaceRows(task, result);
   });
 
   complete();
+  const sourceBinding = safelyBindTaskSourceToWorkspaceRows(task, result, {
+    source: options.source || 'complete_task',
+  });
 
   return {
     completed: true,
     task,
     inviteResult: result,
+    sourceBinding,
   };
 }
 
@@ -382,4 +411,5 @@ module.exports = {
   reconcileCdkTeamTaskSuccess,
   findSuccessfulInviteForTask,
   buildInviteResultFromInvite,
+  bindTaskSourceToWorkspaceRows,
 };
