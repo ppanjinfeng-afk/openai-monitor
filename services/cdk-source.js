@@ -42,6 +42,14 @@ function itemTime(row = {}) {
   return parseTime(row.joined_at || row.invited_at || row.last_synced_at);
 }
 
+function sourceTaskId(source = {}) {
+  return String(source.source_cdk_task_id || '').trim();
+}
+
+function getSourceRemoteInviteId(source = {}) {
+  return String(source.remote_invite_id || '').trim();
+}
+
 const canonicalCdkTasksCte = `
   cdk_task_sources AS (
     SELECT
@@ -255,12 +263,44 @@ function sourceCanBindItem(source = {}, item = {}, requireWorkspace = false) {
     return false;
   }
 
-  const sourceRemoteInviteId = String(source.remote_invite_id || '').trim();
+  const sourceRemoteInviteId = getSourceRemoteInviteId(source);
   if (sourceRemoteInviteId && item.remote_invite_id && sourceRemoteInviteId !== item.remote_invite_id) {
     return false;
   }
 
   return true;
+}
+
+function assignmentScore(source = {}, item = {}, requireWorkspace = false) {
+  if (!sourceCanBindItem(source, item, requireWorkspace)) {
+    return null;
+  }
+
+  const sourceRemoteInviteId = getSourceRemoteInviteId(source);
+  const itemRemoteInviteId = String(item.remote_invite_id || '').trim();
+  const sourceAt = parseTime(source.source_at);
+  const rowAt = itemTime(item);
+  const timeDistance = sourceAt && rowAt
+    ? Math.abs(sourceAt - rowAt)
+    : Number.MAX_SAFE_INTEGER;
+
+  let score = Number(source.source_priority || 99) * 1000000000;
+
+  if (sourceRemoteInviteId && itemRemoteInviteId && sourceRemoteInviteId === itemRemoteInviteId) {
+    score += 0;
+  } else if (sourceRemoteInviteId && item.item_type === 'member') {
+    score += 100000;
+  } else if (sourceRemoteInviteId) {
+    score += 200000;
+  } else if (itemRemoteInviteId) {
+    score += 300000;
+  } else {
+    score += 400000;
+  }
+
+  score += item.item_type === 'pending' && sourceRemoteInviteId && itemRemoteInviteId ? 0 : item.item_type === 'member' ? 1000 : 2000;
+  score += Math.min(timeDistance, 30 * 24 * 60 * 60 * 1000) / 1000;
+  return score;
 }
 
 function buildStrictCdkSourceAssignments(rows = []) {
@@ -275,6 +315,7 @@ function buildStrictCdkSourceAssignments(rows = []) {
 
   const sources = loadStrictCdkSourcesForEmails(items.map(item => item.email_key));
   const usedTasks = new Set();
+  const usedItems = new Set();
   const sortedItems = items
     .slice()
     .sort((left, right) => {
@@ -300,21 +341,40 @@ function buildStrictCdkSourceAssignments(rows = []) {
     });
 
   function assign(source, item) {
-    assignments.set(makeAssignmentKey(item), toSourceObject(source));
-    usedTasks.add(String(source.source_cdk_task_id || ''));
+    const itemKey = makeAssignmentKey(item);
+    assignments.set(itemKey, toSourceObject(source));
+    usedTasks.add(sourceTaskId(source));
+    usedItems.add(itemKey);
   }
 
   function assignPass(candidateSources, requireWorkspace) {
     for (const source of candidateSources) {
-      const taskId = String(source.source_cdk_task_id || '');
+      const taskId = sourceTaskId(source);
       if (!taskId || usedTasks.has(taskId)) {
         continue;
       }
 
-      const item = sortedItems.find(row => (
-        !assignments.has(makeAssignmentKey(row))
-        && sourceCanBindItem(source, row, requireWorkspace)
-      ));
+      let item = null;
+      let itemKey = '';
+      let bestScore = Infinity;
+
+      for (const row of sortedItems) {
+        const candidateKey = makeAssignmentKey(row);
+        if (usedItems.has(candidateKey)) {
+          continue;
+        }
+
+        const score = assignmentScore(source, row, requireWorkspace);
+        if (score === null) {
+          continue;
+        }
+
+        if (score < bestScore || (score === bestScore && (!itemKey || candidateKey.localeCompare(itemKey) < 0))) {
+          item = row;
+          itemKey = candidateKey;
+          bestScore = score;
+        }
+      }
 
       if (item) {
         assign(source, item);

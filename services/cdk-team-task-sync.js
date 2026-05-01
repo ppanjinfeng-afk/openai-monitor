@@ -44,6 +44,62 @@ function buildInviteResultFromInvite(invite = {}) {
   };
 }
 
+function loadSuccessfulInviteById(inviteId, taskId, targetEmail) {
+  const normalizedInviteId = Number(inviteId || 0);
+  if (!normalizedInviteId) {
+    return null;
+  }
+
+  return db.prepare(`
+    SELECT
+      i.*,
+      a.email AS account_email,
+      a.label AS account_label
+    FROM invites i
+    LEFT JOIN accounts a ON a.id = i.account_id
+    WHERE i.id = ?
+      AND LOWER(i.target_email) = LOWER(?)
+      AND COALESCE(i.status, '') IN ('sent', 'accepted')
+      AND COALESCE(i.failure_category, '') = ''
+      AND (COALESCE(i.cdk_task_id, '') = '' OR i.cdk_task_id = ?)
+    LIMIT 1
+  `).get(normalizedInviteId, targetEmail, taskId);
+}
+
+function loadUniqueSuccessfulInviteByRemote(remoteInviteId, taskId, targetEmail, workspaceId = '', accountId = null) {
+  const normalizedRemoteId = normalizeText(remoteInviteId);
+  if (!normalizedRemoteId) {
+    return null;
+  }
+
+  const params = {
+    remoteInviteId: normalizedRemoteId,
+    taskId,
+    targetEmail,
+    workspaceId: normalizeText(workspaceId),
+    accountId: accountId == null ? null : Number(accountId),
+  };
+  const matches = db.prepare(`
+    SELECT
+      i.*,
+      a.email AS account_email,
+      a.label AS account_label
+    FROM invites i
+    LEFT JOIN accounts a ON a.id = i.account_id
+    WHERE COALESCE(i.remote_invite_id, '') = @remoteInviteId
+      AND LOWER(i.target_email) = LOWER(@targetEmail)
+      AND COALESCE(i.status, '') IN ('sent', 'accepted')
+      AND COALESCE(i.failure_category, '') = ''
+      AND (COALESCE(i.cdk_task_id, '') = '' OR i.cdk_task_id = @taskId)
+      AND (@workspaceId = '' OR COALESCE(i.workspace_id, '') = @workspaceId)
+      AND (@accountId IS NULL OR i.account_id = @accountId)
+    ORDER BY datetime(COALESCE(NULLIF(i.updated_at, ''), i.created_at)) DESC
+    LIMIT 2
+  `).all(params);
+
+  return matches.length === 1 ? matches[0] : null;
+}
+
 function findSuccessfulInviteForTask(taskOrId) {
   const task = typeof taskOrId === 'object' && taskOrId
     ? taskOrId
@@ -76,6 +132,43 @@ function findSuccessfulInviteForTask(taskOrId) {
     return linkedInvite;
   }
 
+  const storedResult = parseJsonSafely(task.invite_result_json);
+  const inviteId = storedResult.invite_id || storedResult.inviteId;
+  const remoteInviteId = storedResult.remote_invite_id || storedResult.remoteInviteId;
+  const workspaceId = storedResult.workspace_id || storedResult.workspaceId;
+  const usedAccountId = storedResult.used_account_id || storedResult.account_id;
+
+  const inviteById = loadSuccessfulInviteById(inviteId, task.id, targetEmail);
+  if (inviteById) {
+    return inviteById;
+  }
+
+  const exactRemoteInvite = loadUniqueSuccessfulInviteByRemote(
+    remoteInviteId,
+    task.id,
+    targetEmail,
+    workspaceId,
+    usedAccountId || null
+  );
+  if (exactRemoteInvite) {
+    return exactRemoteInvite;
+  }
+
+  const workspaceRemoteInvite = loadUniqueSuccessfulInviteByRemote(
+    remoteInviteId,
+    task.id,
+    targetEmail,
+    workspaceId
+  );
+  if (workspaceRemoteInvite) {
+    return workspaceRemoteInvite;
+  }
+
+  const uniqueRemoteInvite = loadUniqueSuccessfulInviteByRemote(remoteInviteId, task.id, targetEmail);
+  if (uniqueRemoteInvite) {
+    return uniqueRemoteInvite;
+  }
+
   return null;
 }
 
@@ -104,9 +197,9 @@ function findFirstSuccessfulTaskForSameCdk(task) {
           AND LOWER(TRIM(COALESCE(NULLIF(TRIM(existing.cdk_code), ''), existing_card.code, ''))) = LOWER(TRIM(@cdkCode))
         )
       )
-    ORDER BY datetime(COALESCE(NULLIF(completed_at, ''), updated_at, created_at)) ASC,
-             datetime(created_at) ASC,
-             id ASC
+    ORDER BY datetime(COALESCE(NULLIF(existing.completed_at, ''), existing.updated_at, existing.created_at)) ASC,
+             datetime(existing.created_at) ASC,
+             existing.id ASC
     LIMIT 1
   `).get({
     taskId: task.id,

@@ -198,9 +198,9 @@ function loadSuccessTasksForGroup(groupKey) {
     WHERE t.task_type = 'team_invite'
       AND t.status = 'SUCCESS'
       AND LOWER(TRIM(COALESCE(NULLIF(TRIM(t.cdk_code), ''), c.code, ''))) = ?
-    ORDER BY datetime(COALESCE(NULLIF(completed_at, ''), updated_at, created_at)) ASC,
-             datetime(created_at) ASC,
-             id ASC
+    ORDER BY datetime(COALESCE(NULLIF(t.completed_at, ''), t.updated_at, t.created_at)) ASC,
+             datetime(t.created_at) ASC,
+             t.id ASC
   `).all(code);
 }
 
