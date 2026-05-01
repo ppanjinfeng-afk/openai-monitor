@@ -5,6 +5,7 @@ const memberOverflowRebalance = require('../services/member-overflow-rebalance')
 const untrackedMemberCleanup = require('../services/untracked-member-cleanup');
 const staleMemberCleanup = require('../services/stale-member-cleanup');
 const { categoryLabel, classifyFailure } = require('../services/failure-utils');
+const { buildStrictCdkSourceAssignments, makeAssignmentKey } = require('../services/cdk-source');
 
 const router = express.Router();
 
@@ -554,6 +555,7 @@ router.get('/member-cleanup', (req, res) => {
   const memberItems = db.prepare(`
     SELECT
       'member' AS item_type,
+      wm.id,
       wm.account_id,
       a.email AS account_email,
       w.id AS workspace_row_id,
@@ -570,7 +572,11 @@ router.get('/member-cleanup', (req, res) => {
       wm.deactivated_time,
       wm.joined_at,
       '' AS invited_at,
-      '' AS remote_invite_id
+      '' AS remote_invite_id,
+      wm.source_cdk_task_id,
+      wm.source_cdk_id,
+      wm.source_cdk_code,
+      wm.last_synced_at
     FROM workspace_members wm
     JOIN workspaces w ON w.workspace_id = wm.workspace_id AND w.account_id = wm.account_id
     JOIN accounts a ON a.id = wm.account_id
@@ -583,6 +589,7 @@ router.get('/member-cleanup', (req, res) => {
   const pendingItems = db.prepare(`
     SELECT
       'pending' AS item_type,
+      wp.id,
       wp.account_id,
       a.email AS account_email,
       w.id AS workspace_row_id,
@@ -599,7 +606,11 @@ router.get('/member-cleanup', (req, res) => {
       '' AS deactivated_time,
       '' AS joined_at,
       wp.invited_at,
-      wp.remote_invite_id
+      wp.remote_invite_id,
+      wp.source_cdk_task_id,
+      wp.source_cdk_id,
+      wp.source_cdk_code,
+      wp.last_synced_at
     FROM workspace_pending_invites wp
     JOIN workspaces w ON w.workspace_id = wp.workspace_id AND w.account_id = wp.account_id
     JOIN accounts a ON a.id = wp.account_id
@@ -608,7 +619,16 @@ router.get('/member-cleanup', (req, res) => {
       AND a.access_token != ''
   `).all();
 
-  let items = [...memberItems, ...pendingItems];
+  const sourceAssignments = buildStrictCdkSourceAssignments([...memberItems, ...pendingItems]);
+  let items = [...memberItems, ...pendingItems].map(item => {
+    const source = sourceAssignments.get(makeAssignmentKey(item));
+    return {
+      ...item,
+      source_cdk_task_id: source?.source_cdk_task_id || '',
+      source_cdk_id: source?.source_cdk_id ?? null,
+      source_cdk_code: source?.source_cdk_code || '',
+    };
+  });
 
   if (itemType !== 'all') {
     items = items.filter(item => item.item_type === itemType);

@@ -12,6 +12,36 @@ function normalizeCdkCode(code) {
   return String(code || '').trim();
 }
 
+function makeAssignmentKey(row = {}) {
+  return `${row.item_type || 'member'}:${String(row.id ?? '')}`;
+}
+
+function toSourceObject(source) {
+  if (!source?.source_cdk_task_id) {
+    return null;
+  }
+
+  return {
+    source_cdk_task_id: String(source.source_cdk_task_id || ''),
+    source_cdk_id: source.source_cdk_id == null ? null : Number(source.source_cdk_id),
+    source_cdk_code: normalizeCdkCode(source.source_cdk_code),
+  };
+}
+
+function parseTime(value) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return 0;
+  }
+
+  const parsed = Date.parse(text.includes('T') ? text : text.replace(' ', 'T'));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function itemTime(row = {}) {
+  return parseTime(row.joined_at || row.invited_at || row.last_synced_at);
+}
+
 const canonicalCdkTasksCte = `
   cdk_task_sources AS (
     SELECT
@@ -132,10 +162,193 @@ function findStrictCdkSourceForWorkspaceEmail({ workspaceId, email, remoteInvite
   };
 }
 
+function loadStrictCdkSourcesForEmails(emails = []) {
+  const normalizedEmails = Array.from(new Set(
+    emails.map(normalizeEmail).filter(Boolean)
+  ));
+
+  if (normalizedEmails.length === 0) {
+    return [];
+  }
+
+  const placeholders = normalizedEmails.map(() => '?').join(',');
+
+  return db.prepare(`
+    WITH ${canonicalCdkTasksCte},
+    candidate_sources AS (
+      SELECT
+        t.id AS source_cdk_task_id,
+        t.cdk_id AS source_cdk_id,
+        t.normalized_cdk_code AS source_cdk_code,
+        LOWER(TRIM(t.account_email)) AS email_key,
+        COALESCE(i.workspace_id, '') AS workspace_key,
+        COALESCE(i.remote_invite_id, '') AS remote_invite_id,
+        1 AS source_priority,
+        datetime(COALESCE(NULLIF(t.completed_at, ''), t.updated_at, t.created_at)) AS source_at
+      FROM invites i
+      JOIN canonical_cdk_tasks t ON t.id = i.cdk_task_id
+      WHERE COALESCE(i.target_email, '') != ''
+        AND COALESCE(t.account_email, '') != ''
+        AND LOWER(TRIM(i.target_email)) = LOWER(TRIM(t.account_email))
+        AND COALESCE(i.workspace_id, '') != ''
+        AND COALESCE(i.status, '') IN ('sent', 'accepted')
+        AND COALESCE(i.failure_category, '') = ''
+
+      UNION ALL
+
+      SELECT
+        t.id AS source_cdk_task_id,
+        t.cdk_id AS source_cdk_id,
+        t.normalized_cdk_code AS source_cdk_code,
+        LOWER(TRIM(t.account_email)) AS email_key,
+        COALESCE(
+          NULLIF(json_extract(t.invite_result_json, '$.workspace_id'), ''),
+          NULLIF(json_extract(t.invite_result_json, '$.workspaceId'), '')
+        ) AS workspace_key,
+        '' AS remote_invite_id,
+        2 AS source_priority,
+        datetime(COALESCE(NULLIF(t.completed_at, ''), t.updated_at, t.created_at)) AS source_at
+      FROM canonical_cdk_tasks t
+      WHERE COALESCE(t.account_email, '') != ''
+        AND COALESCE(t.invite_result_json, '') != ''
+        AND json_valid(t.invite_result_json)
+        AND COALESCE(json_extract(t.invite_result_json, '$.failure_category'), '') = ''
+        AND COALESCE(
+          NULLIF(json_extract(t.invite_result_json, '$.workspace_id'), ''),
+          NULLIF(json_extract(t.invite_result_json, '$.workspaceId'), '')
+        ) != ''
+
+      UNION ALL
+
+      SELECT
+        t.id AS source_cdk_task_id,
+        t.cdk_id AS source_cdk_id,
+        t.normalized_cdk_code AS source_cdk_code,
+        LOWER(TRIM(t.account_email)) AS email_key,
+        '' AS workspace_key,
+        '' AS remote_invite_id,
+        3 AS source_priority,
+        datetime(COALESCE(NULLIF(t.completed_at, ''), t.updated_at, t.created_at)) AS source_at
+      FROM canonical_cdk_tasks t
+      WHERE COALESCE(t.account_email, '') != ''
+    )
+    SELECT *
+    FROM candidate_sources
+    WHERE email_key IN (${placeholders})
+    ORDER BY source_priority ASC, datetime(source_at) ASC, source_cdk_task_id ASC
+  `).all(...normalizedEmails);
+}
+
+function normalizeAssignmentItem(row = {}, index = 0) {
+  return {
+    ...row,
+    id: String(row.id ?? `row-${index}`),
+    item_type: row.item_type || 'member',
+    email_key: normalizeEmail(row.email),
+    workspace_key: normalizeWorkspaceId(row.workspace_id),
+    remote_invite_id: String(row.remote_invite_id || '').trim(),
+  };
+}
+
+function sourceCanBindItem(source = {}, item = {}, requireWorkspace = false) {
+  if (!source?.source_cdk_task_id || !item?.email_key) {
+    return false;
+  }
+
+  if (normalizeEmail(source.email_key) !== item.email_key) {
+    return false;
+  }
+
+  const sourceWorkspace = normalizeWorkspaceId(source.workspace_key);
+  if (requireWorkspace && sourceWorkspace !== item.workspace_key) {
+    return false;
+  }
+
+  if (sourceWorkspace && sourceWorkspace !== item.workspace_key) {
+    return false;
+  }
+
+  const sourceRemoteInviteId = String(source.remote_invite_id || '').trim();
+  if (sourceRemoteInviteId && item.remote_invite_id && sourceRemoteInviteId !== item.remote_invite_id) {
+    return false;
+  }
+
+  return true;
+}
+
+function buildStrictCdkSourceAssignments(rows = []) {
+  const items = rows
+    .map(normalizeAssignmentItem)
+    .filter(item => item.email_key);
+  const assignments = new Map();
+
+  if (items.length === 0) {
+    return assignments;
+  }
+
+  const sources = loadStrictCdkSourcesForEmails(items.map(item => item.email_key));
+  const usedTasks = new Set();
+  const sortedItems = items
+    .slice()
+    .sort((left, right) => {
+      const timeDiff = itemTime(left) - itemTime(right);
+      if (timeDiff !== 0) {
+        return timeDiff;
+      }
+      return makeAssignmentKey(left).localeCompare(makeAssignmentKey(right));
+    });
+
+  const sortedSources = sources
+    .slice()
+    .sort((left, right) => {
+      const priorityDiff = Number(left.source_priority || 99) - Number(right.source_priority || 99);
+      if (priorityDiff !== 0) {
+        return priorityDiff;
+      }
+      const timeDiff = parseTime(left.source_at) - parseTime(right.source_at);
+      if (timeDiff !== 0) {
+        return timeDiff;
+      }
+      return String(left.source_cdk_task_id || '').localeCompare(String(right.source_cdk_task_id || ''));
+    });
+
+  function assign(source, item) {
+    assignments.set(makeAssignmentKey(item), toSourceObject(source));
+    usedTasks.add(String(source.source_cdk_task_id || ''));
+  }
+
+  function assignPass(candidateSources, requireWorkspace) {
+    for (const source of candidateSources) {
+      const taskId = String(source.source_cdk_task_id || '');
+      if (!taskId || usedTasks.has(taskId)) {
+        continue;
+      }
+
+      const item = sortedItems.find(row => (
+        !assignments.has(makeAssignmentKey(row))
+        && sourceCanBindItem(source, row, requireWorkspace)
+      ));
+
+      if (item) {
+        assign(source, item);
+      }
+    }
+  }
+
+  assignPass(sortedSources.filter(source => normalizeWorkspaceId(source.workspace_key)), true);
+  assignPass(sortedSources, false);
+
+  return assignments;
+}
+
 module.exports = {
+  buildStrictCdkSourceAssignments,
   canonicalCdkTasksCte,
   findStrictCdkSourceForWorkspaceEmail,
+  loadStrictCdkSourcesForEmails,
+  makeAssignmentKey,
   normalizeCdkCode,
   normalizeEmail,
   normalizeWorkspaceId,
+  toSourceObject,
 };

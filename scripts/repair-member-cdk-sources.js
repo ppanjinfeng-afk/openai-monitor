@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 
 const db = require('../db');
-const { findStrictCdkSourceForWorkspaceEmail } = require('../services/cdk-source');
+const {
+  buildStrictCdkSourceAssignments,
+  makeAssignmentKey,
+} = require('../services/cdk-source');
 
 const dryRun = process.argv.includes('--dry-run');
 
@@ -31,9 +34,17 @@ function sourceValues(source) {
   ];
 }
 
-function repairMembers() {
+function repairMembers(assignments) {
   const rows = db.prepare(`
-    SELECT id, workspace_id, email
+    SELECT
+      'member' AS item_type,
+      id,
+      workspace_id,
+      email,
+      '' AS remote_invite_id,
+      joined_at,
+      '' AS invited_at,
+      last_synced_at
     FROM workspace_members
     WHERE COALESCE(email, '') != ''
       AND COALESCE(deactivated_time, '') = ''
@@ -44,10 +55,7 @@ function repairMembers() {
 
   const transaction = db.transaction(() => {
     for (const row of rows) {
-      const source = findStrictCdkSourceForWorkspaceEmail({
-        workspaceId: row.workspace_id,
-        email: row.email,
-      });
+      const source = assignments.get(makeAssignmentKey(row));
 
       if (source) {
         linked += 1;
@@ -63,10 +71,7 @@ function repairMembers() {
     transaction();
   } else {
     for (const row of rows) {
-      const source = findStrictCdkSourceForWorkspaceEmail({
-        workspaceId: row.workspace_id,
-        email: row.email,
-      });
+      const source = assignments.get(makeAssignmentKey(row));
       if (source) linked += 1;
       else cleared += 1;
     }
@@ -75,9 +80,17 @@ function repairMembers() {
   return { scanned: rows.length, linked, cleared };
 }
 
-function repairPendingInvites() {
+function repairPendingInvites(assignments) {
   const rows = db.prepare(`
-    SELECT id, workspace_id, remote_invite_id, email
+    SELECT
+      'pending' AS item_type,
+      id,
+      workspace_id,
+      remote_invite_id,
+      email,
+      '' AS joined_at,
+      invited_at,
+      last_synced_at
     FROM workspace_pending_invites
     WHERE COALESCE(email, '') != ''
   `).all();
@@ -87,11 +100,7 @@ function repairPendingInvites() {
 
   const transaction = db.transaction(() => {
     for (const row of rows) {
-      const source = findStrictCdkSourceForWorkspaceEmail({
-        workspaceId: row.workspace_id,
-        email: row.email,
-        remoteInviteId: row.remote_invite_id,
-      });
+      const source = assignments.get(makeAssignmentKey(row));
 
       if (source) {
         linked += 1;
@@ -107,11 +116,7 @@ function repairPendingInvites() {
     transaction();
   } else {
     for (const row of rows) {
-      const source = findStrictCdkSourceForWorkspaceEmail({
-        workspaceId: row.workspace_id,
-        email: row.email,
-        remoteInviteId: row.remote_invite_id,
-      });
+      const source = assignments.get(makeAssignmentKey(row));
       if (source) linked += 1;
       else cleared += 1;
     }
@@ -120,10 +125,41 @@ function repairPendingInvites() {
   return { scanned: rows.length, linked, cleared };
 }
 
+const memberRows = db.prepare(`
+  SELECT
+    'member' AS item_type,
+    id,
+    workspace_id,
+    email,
+    '' AS remote_invite_id,
+    joined_at,
+    '' AS invited_at,
+    last_synced_at
+  FROM workspace_members
+  WHERE COALESCE(email, '') != ''
+    AND COALESCE(deactivated_time, '') = ''
+`).all();
+
+const pendingRows = db.prepare(`
+  SELECT
+    'pending' AS item_type,
+    id,
+    workspace_id,
+    remote_invite_id,
+    email,
+    '' AS joined_at,
+    invited_at,
+    last_synced_at
+  FROM workspace_pending_invites
+  WHERE COALESCE(email, '') != ''
+`).all();
+
+const assignments = buildStrictCdkSourceAssignments([...memberRows, ...pendingRows]);
+
 const result = {
   dryRun,
-  members: repairMembers(),
-  pending_invites: repairPendingInvites(),
+  members: repairMembers(assignments),
+  pending_invites: repairPendingInvites(assignments),
 };
 
 console.log(JSON.stringify(result, null, 2));

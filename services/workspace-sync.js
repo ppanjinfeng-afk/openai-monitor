@@ -1,7 +1,7 @@
 const db = require('../db');
 const { withBrowserPage } = require('./browser');
 const { listAccountWorkspaces } = require('./account-workspaces');
-const { findStrictCdkSourceForWorkspaceEmail } = require('./cdk-source');
+const { buildStrictCdkSourceAssignments, makeAssignmentKey } = require('./cdk-source');
 const WORKSPACE_MEMBER_LIMIT = 8;
 
 function sleep(ms) {
@@ -428,13 +428,22 @@ function replaceWorkspaceMembers(account, workspaceId, members) {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
+  const sourceRows = members.map((member, index) => ({
+    item_type: 'member',
+    id: `sync-member-${workspaceId}-${index}`,
+    workspace_id: workspaceId,
+    email: member.email || '',
+    remote_invite_id: '',
+    joined_at: member.joined_at || '',
+    invited_at: '',
+    last_synced_at: '',
+  }));
+  const sourceAssignments = buildStrictCdkSourceAssignments(sourceRows);
+
   const transact = db.transaction(() => {
     remove.run(account.id, workspaceId);
-    for (const member of members) {
-      const source = findStrictCdkSourceForWorkspaceEmail({
-        workspaceId,
-        email: member.email,
-      });
+    for (const [index, member] of members.entries()) {
+      const source = sourceAssignments.get(makeAssignmentKey(sourceRows[index]));
 
       insert.run(
         account.id,
@@ -479,14 +488,22 @@ function replaceWorkspacePendingInvites(account, workspaceId, pendingInvites) {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
+  const sourceRows = pendingInvites.map((invite, index) => ({
+    item_type: 'pending',
+    id: `sync-pending-${workspaceId}-${index}`,
+    workspace_id: workspaceId,
+    email: invite.email || '',
+    remote_invite_id: invite.remote_invite_id || '',
+    joined_at: '',
+    invited_at: invite.invited_at || '',
+    last_synced_at: '',
+  }));
+  const sourceAssignments = buildStrictCdkSourceAssignments(sourceRows);
+
   const transact = db.transaction(() => {
     remove.run(account.id, workspaceId);
-    for (const invite of pendingInvites) {
-      const source = findStrictCdkSourceForWorkspaceEmail({
-        workspaceId,
-        email: invite.email,
-        remoteInviteId: invite.remote_invite_id,
-      });
+    for (const [index, invite] of pendingInvites.entries()) {
+      const source = sourceAssignments.get(makeAssignmentKey(sourceRows[index]));
 
       insert.run(
         account.id,

@@ -1856,6 +1856,25 @@ user2@example.com,pass456,\u8d26\u53f72'></textarea>
     `;
   },
 
+  memberSourceIdentity(item) {
+    const cdk = String(item?.source_cdk_code || '').trim();
+    const taskId = String(item?.source_cdk_task_id || '').trim();
+
+    if (!cdk && !taskId) {
+      return '<span class="text-muted text-xs">-</span>';
+    }
+
+    return `
+      <div class="member-source-identity">
+        ${this.quotaPill('CDK', 'success')}
+        <strong title="${this.escapeHtml(cdk || '-')}">${this.escapeHtml(cdk || '-')}</strong>
+        <span class="text-muted text-xs" title="${this.escapeHtml(taskId || '')}">
+          专属ID：${this.escapeHtml(this.shortId(taskId || '-'))}
+        </span>
+      </div>
+    `;
+  },
+
   memberCleanupRow(item, selected = false) {
     const isMember = item.item_type === 'member';
     const canKick = isMember && !item.is_owner && item.account_id && item.user_id;
@@ -1915,6 +1934,7 @@ user2@example.com,pass456,\u8d26\u53f72'></textarea>
             <span class="text-muted text-xs">${this.escapeHtml(item.workspace_id || '')}</span>
           </div>
         </td>
+        <td>${this.memberSourceIdentity(item)}</td>
         <td>
           <div class="surface-chip-row member-cleanup-role">
             ${statusPills}
