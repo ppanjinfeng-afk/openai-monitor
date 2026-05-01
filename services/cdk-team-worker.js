@@ -2,6 +2,7 @@ const db = require('../db');
 const fetch = require('node-fetch');
 const {
   completeCdkTeamTask,
+  scheduleCdkTeamTaskCompletionRetry,
   reconcileCdkTeamTaskSuccess,
 } = require('./cdk-team-task-sync');
 
@@ -179,7 +180,25 @@ class CdkTeamWorker {
   }
 
   completeTask(taskId, inviteResult) {
-    completeCdkTeamTask(taskId, inviteResult, { source: 'worker_response' });
+    try {
+      const syncResult = completeCdkTeamTask(taskId, inviteResult, { source: 'worker_response' });
+      if (!syncResult.completed && syncResult.reason !== 'cdk_already_completed') {
+        const retry = scheduleCdkTeamTaskCompletionRetry(taskId, inviteResult, {
+          source: 'worker_response_retry',
+        });
+        console.error(
+          `[CDK Team Worker] Task ${taskId} invite succeeded but completion sync did not finish (${syncResult.reason || 'unknown'}); retry ${retry.scheduled ? 'scheduled' : retry.reason || 'skipped'}`
+        );
+      }
+    } catch (err) {
+      const retry = scheduleCdkTeamTaskCompletionRetry(taskId, inviteResult, {
+        source: 'worker_response_retry',
+      });
+      console.error(
+        `[CDK Team Worker] Task ${taskId} invite succeeded but completion sync failed; retry ${retry.scheduled ? 'scheduled' : retry.reason || 'skipped'}:`,
+        err.message
+      );
+    }
     return;
 
     const task = db.prepare('SELECT * FROM cdk_tasks WHERE id = ?').get(taskId);

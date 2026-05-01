@@ -17,6 +17,8 @@ function parseJsonSafely(value) {
   }
 }
 
+const completionRetryTimers = new Map();
+
 function buildInviteResultFromInvite(invite = {}) {
   const accountEmail = normalizeText(invite.account_email);
   const workspaceName = normalizeText(invite.workspace_name);
@@ -171,6 +173,34 @@ function bindTaskSourceToWorkspaceRows(task = {}, inviteResult = {}) {
       targetEmail,
       remoteInviteId
     ).changes;
+
+    if (pendingUpdated === 0) {
+      const remoteMatches = db.prepare(`
+        SELECT rowid AS row_id
+        FROM workspace_pending_invites
+        WHERE LOWER(email) = LOWER(?)
+          AND COALESCE(remote_invite_id, '') = ?
+          AND (COALESCE(source_cdk_task_id, '') = '' OR source_cdk_task_id = ?)
+        ORDER BY datetime(COALESCE(NULLIF(last_synced_at, ''), invited_at, created_at)) DESC
+        LIMIT 2
+      `).all(targetEmail, remoteInviteId, source.source_cdk_task_id);
+
+      if (remoteMatches.length === 1) {
+        pendingUpdated = db.prepare(`
+          UPDATE workspace_pending_invites
+          SET source_cdk_task_id = ?,
+              source_cdk_id = ?,
+              source_cdk_code = ?,
+              last_synced_at = COALESCE(last_synced_at, datetime('now'))
+          WHERE rowid = ?
+        `).run(
+          source.source_cdk_task_id,
+          source.source_cdk_id,
+          source.source_cdk_code,
+          remoteMatches[0].row_id
+        ).changes;
+      }
+    }
   } else {
     pendingUpdated = db.prepare(`
       UPDATE workspace_pending_invites
@@ -229,6 +259,88 @@ function safelyBindTaskSourceToWorkspaceRows(task = {}, inviteResult = {}, optio
       error: err.message,
     };
   }
+}
+
+function scheduleCdkTeamTaskCompletionRetry(taskId, inviteResult = {}, options = {}) {
+  const normalizedTaskId = normalizeText(taskId);
+  if (!normalizedTaskId) {
+    return { scheduled: false, reason: 'missing_task_id' };
+  }
+
+  if (completionRetryTimers.has(normalizedTaskId)) {
+    return { scheduled: false, reason: 'already_scheduled' };
+  }
+
+  const attempts = Math.max(1, Math.min(Number(options.attempts || 6) || 6, 20));
+  const delayMs = Math.max(1000, Math.min(Number(options.delayMs || 5000) || 5000, 60000));
+  const source = normalizeText(options.source) || 'completion_retry';
+  let attempt = 0;
+
+  const finish = () => {
+    completionRetryTimers.delete(normalizedTaskId);
+  };
+
+  const run = () => {
+    attempt += 1;
+
+    try {
+      const task = db.prepare('SELECT status FROM cdk_tasks WHERE id = ?').get(normalizedTaskId);
+      if (!task) {
+        finish();
+        return;
+      }
+
+      if (normalizeText(task.status).toUpperCase() === 'SUCCESS') {
+        finish();
+        return;
+      }
+
+      const result = completeCdkTeamTask(normalizedTaskId, inviteResult, {
+        source: `${source}_${attempt}`,
+      });
+
+      if (result.completed || result.reason === 'cdk_already_completed') {
+        finish();
+        return;
+      }
+
+      if (attempt >= attempts) {
+        console.error(
+          `[CDK Team Sync] Task ${normalizedTaskId} still not completed after ${attempts} retries: ${result.reason || 'unknown'}`
+        );
+        finish();
+        return;
+      }
+    } catch (err) {
+      if (attempt >= attempts) {
+        console.error(
+          `[CDK Team Sync] Task ${normalizedTaskId} completion retry exhausted:`,
+          err.message
+        );
+        finish();
+        return;
+      }
+
+      console.error(
+        `[CDK Team Sync] Task ${normalizedTaskId} completion retry failed (${attempt}/${attempts}):`,
+        err.message
+      );
+    }
+
+    const timer = setTimeout(run, delayMs);
+    if (typeof timer.unref === 'function') {
+      timer.unref();
+    }
+    completionRetryTimers.set(normalizedTaskId, timer);
+  };
+
+  const timer = setTimeout(run, delayMs);
+  if (typeof timer.unref === 'function') {
+    timer.unref();
+  }
+  completionRetryTimers.set(normalizedTaskId, timer);
+
+  return { scheduled: true, attempts, delayMs };
 }
 
 function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
@@ -408,6 +520,7 @@ function reconcileCdkTeamTaskSuccess(taskId, options = {}) {
 
 module.exports = {
   completeCdkTeamTask,
+  scheduleCdkTeamTaskCompletionRetry,
   reconcileCdkTeamTaskSuccess,
   findSuccessfulInviteForTask,
   buildInviteResultFromInvite,

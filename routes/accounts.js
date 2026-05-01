@@ -6,7 +6,10 @@ const memberOverflowRebalance = require('../services/member-overflow-rebalance')
 const untrackedMemberCleanup = require('../services/untracked-member-cleanup');
 const { listAccountWorkspaces } = require('../services/account-workspaces');
 const { classifyFailure } = require('../services/failure-utils');
-const { completeCdkTeamTask } = require('../services/cdk-team-task-sync');
+const {
+  completeCdkTeamTask,
+  scheduleCdkTeamTaskCompletionRetry,
+} = require('../services/cdk-team-task-sync');
 
 const router = express.Router();
 const WORKSPACE_RESERVED_SEATS_SQL = `
@@ -1662,6 +1665,35 @@ function persistInviteSuccess(account, targetEmail, result) {
   return shouldInsertSeparateRecord ? null : existing;
 }
 
+function syncCdkTeamTaskAfterInvite(cdkTaskId, finalResult, source) {
+  const normalizedTaskId = String(cdkTaskId || '').trim();
+  if (!normalizedTaskId) {
+    return null;
+  }
+
+  try {
+    const syncResult = completeCdkTeamTask(normalizedTaskId, finalResult, { source });
+    if (!syncResult.completed && syncResult.reason !== 'cdk_already_completed') {
+      const retry = scheduleCdkTeamTaskCompletionRetry(normalizedTaskId, finalResult, {
+        source: `${source}_retry`,
+      });
+      console.error(
+        `[CDK Team Sync] Task ${normalizedTaskId} not completed after invite success (${syncResult.reason || 'unknown'}); retry ${retry.scheduled ? 'scheduled' : retry.reason || 'skipped'}`
+      );
+    }
+    return syncResult;
+  } catch (syncErr) {
+    const retry = scheduleCdkTeamTaskCompletionRetry(normalizedTaskId, finalResult, {
+      source: `${source}_retry`,
+    });
+    console.error(
+      `[CDK Team Sync] Failed to mark task ${normalizedTaskId} as success; retry ${retry.scheduled ? 'scheduled' : retry.reason || 'skipped'}:`,
+      syncErr.message
+    );
+    return { completed: false, error: syncErr.message };
+  }
+}
+
 function logInviteEvent(accountId, status, message) {
   db.prepare(`INSERT INTO check_logs (account_id, status, message) VALUES (?, ?, ?)`).run(accountId, status, message);
 }
@@ -2581,6 +2613,7 @@ router.post('/:id(\\d+)/invite', async (req, res) => {
         releaseWorkspaceSlot(workspaceReservation);
         workspaceReservation = null;
       }
+      syncCdkTeamTaskAfterInvite(cdkTaskId, finalResult, 'manual_invite_route_success');
       const postInviteSync = schedulePostInviteSync(usedAccount, finalResult, selectedWorkspaceId);
 
       logInviteAttempts(finalResult.wasResend ? 'manual-resend' : 'manual-invite', targetEmail, delivery.attempts);
@@ -2908,13 +2941,7 @@ router.post('/auto-invite', async (req, res) => {
         releaseWorkspaceSlot(workspaceReservation);
         workspaceReservation = null;
       }
-      if (cdkTaskId) {
-        try {
-          completeCdkTeamTask(cdkTaskId, finalResult, { source: 'auto_invite_route_success' });
-        } catch (syncErr) {
-          console.error(`[CDK Team Sync] Failed to mark task ${cdkTaskId} as success:`, syncErr.message);
-        }
-      }
+      syncCdkTeamTaskAfterInvite(cdkTaskId, finalResult, 'auto_invite_route_success');
       const postInviteSync = schedulePostInviteSync(usedAccount, finalResult, reusableInvite?.workspace_id);
 
       logInviteAttempts(reusableInvite ? 'auto-resend' : 'auto-invite', targetEmail, delivery.attempts);
