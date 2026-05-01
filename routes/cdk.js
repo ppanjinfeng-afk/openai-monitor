@@ -170,6 +170,46 @@ function getTeamInventoryPayload(card) {
   };
 }
 
+function logCdkRouteError(context, err) {
+  console.error(`[CDK Route] ${context}:`, err?.stack || err?.message || err);
+}
+
+function runCdkMaintenanceSafely(context) {
+  try {
+    return releaseStaleProcessingCdks();
+  } catch (err) {
+    logCdkRouteError(`${context} maintenance failed`, err);
+    return null;
+  }
+}
+
+function refreshInventorySafely(context) {
+  try {
+    refreshInventoryInBackground();
+  } catch (err) {
+    logCdkRouteError(`${context} inventory refresh failed`, err);
+  }
+}
+
+function getTeamInventoryPayloadSafely(card, context) {
+  try {
+    return getTeamInventoryPayload(card);
+  } catch (err) {
+    logCdkRouteError(`${context} inventory check failed`, err);
+    return {
+      activationAllowed: false,
+      stockCount: 0,
+      activationStockCount: 0,
+      reservedCount: 0,
+      heldCount: 0,
+      reservationActive: false,
+      orderHoldWindowMinutes: null,
+      cdkReserveWindowMinutes: null,
+      inventoryMessage: '库存检查失败，请稍后重试或联系客服处理',
+    };
+  }
+}
+
 function createTeamInviteTask(cardCodeInput, emailInput) {
   const cardCode = String(cardCodeInput || '').trim().toUpperCase();
   const email = normalizeEmail(emailInput);
@@ -262,7 +302,7 @@ function createTeamInviteTask(cardCodeInput, emailInput) {
       throw err;
     }
 
-    const inventory = getTeamInventoryPayload(card);
+    const inventory = getTeamInventoryPayloadSafely(card, 'submit-team');
     if (!inventory.activationAllowed) {
       const err = new Error(inventory.inventoryMessage || '当前无库存，暂时无法激活此 CDK，请稍后再试');
       err.statusCode = 409;
@@ -343,57 +383,65 @@ function detachCdkReferences(cardIds) {
  * GET /api/cdk/list — List all CDK cards with stats
  */
 router.get('/list', (req, res) => {
-  releaseStaleProcessingCdks();
+  try {
+    runCdkMaintenanceSafely('list');
 
-  const status = req.query.status || 'all';
-  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 100));
-  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-  const offset = (page - 1) * limit;
-  const search = (req.query.search || '').trim();
+    const status = req.query.status || 'all';
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 100));
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const offset = (page - 1) * limit;
+    const search = (req.query.search || '').trim();
 
-  let where = '';
-  const params = {};
+    let where = '';
+    const params = {};
 
-  if (status !== 'all') {
-    where += ' AND status = @status';
-    params.status = status;
+    if (status !== 'all') {
+      where += ' AND status = @status';
+      params.status = status;
+    }
+    if (search) {
+      where += ' AND (code LIKE @search OR assigned_email LIKE @search)';
+      params.search = `%${search}%`;
+    }
+
+    const items = db.prepare(`
+      SELECT * FROM cdk_cards 
+      WHERE 1=1 ${where}
+      ORDER BY created_at DESC 
+      LIMIT @limit
+      OFFSET @offset
+    `).all({ ...params, limit, offset });
+
+    const total = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM cdk_cards
+      WHERE 1=1 ${where}
+    `).get(params);
+
+    const summary = db.prepare(`
+      SELECT 
+        COUNT(*) AS total,
+        SUM(CASE WHEN status = 'unused' THEN 1 ELSE 0 END) AS unused,
+        SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) AS processing,
+        SUM(CASE WHEN status = 'used' THEN 1 ELSE 0 END) AS used,
+        SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END) AS expired
+      FROM cdk_cards
+    `).get();
+
+    res.json({
+      items,
+      summary,
+      total: Number(total?.count || 0),
+      page,
+      limit,
+    });
+  } catch (err) {
+    logCdkRouteError('list failed', err);
+    res.status(500).json({
+      error: 'CDK 功能台加载失败',
+      message: err.message || 'Internal Server Error',
+    });
   }
-  if (search) {
-    where += ' AND (code LIKE @search OR assigned_email LIKE @search)';
-    params.search = `%${search}%`;
-  }
-
-  const items = db.prepare(`
-    SELECT * FROM cdk_cards 
-    WHERE 1=1 ${where}
-    ORDER BY created_at DESC 
-    LIMIT @limit
-    OFFSET @offset
-  `).all({ ...params, limit, offset });
-
-  const total = db.prepare(`
-    SELECT COUNT(*) AS count
-    FROM cdk_cards
-    WHERE 1=1 ${where}
-  `).get(params);
-
-  const summary = db.prepare(`
-    SELECT 
-      COUNT(*) AS total,
-      SUM(CASE WHEN status = 'unused' THEN 1 ELSE 0 END) AS unused,
-      SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) AS processing,
-      SUM(CASE WHEN status = 'used' THEN 1 ELSE 0 END) AS used,
-      SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END) AS expired
-    FROM cdk_cards
-  `).get();
-
-  res.json({
-    items,
-    summary,
-    total: Number(total?.count || 0),
-    page,
-    limit,
-  });
 });
 
 /**
@@ -497,8 +545,9 @@ router.post('/batch-delete', (req, res) => {
  * POST /api/cdk/verify — Verify if a CDK code is valid
  */
 router.post('/verify', (req, res) => {
-  releaseStaleProcessingCdks();
-  refreshInventoryInBackground();
+  try {
+  runCdkMaintenanceSafely('verify');
+  refreshInventorySafely('verify');
 
   const cardCode = (req.body.cardCode || '').trim().toUpperCase();
   
@@ -560,7 +609,7 @@ router.post('/verify', (req, res) => {
     });
   }
 
-  const inventory = getTeamInventoryPayload(card);
+  const inventory = getTeamInventoryPayloadSafely(card, 'verify');
   const planType = String(card.plan_type || '').toLowerCase();
   let message = '卡密有效，可以兑换';
   if (planType.includes('plus') || planType.includes('pro')) {
@@ -588,6 +637,18 @@ router.post('/verify', (req, res) => {
     cdkReserveWindowMinutes: inventory.cdkReserveWindowMinutes,
     inventoryMessage: inventory.inventoryMessage,
   });
+  } catch (err) {
+    logCdkRouteError('verify failed', err);
+    return res.json({
+      valid: false,
+      message: 'CDK 验证失败，请稍后重试或联系客服处理',
+      cardStatus: '-1',
+      isUsed: false,
+      isProcessing: false,
+      activationAllowed: false,
+      error: 'CDK_VERIFY_FAILED',
+    });
+  }
 });
 
 /**
@@ -650,8 +711,8 @@ router.post('/submit', (req, res) => {
  * POST /api/cdk/submit-team - Submit a CDK task that sends a Team invite.
  */
 router.post('/submit-team', async (req, res) => {
-  releaseStaleProcessingCdks();
-  refreshInventoryInBackground();
+  runCdkMaintenanceSafely('submit-team');
+  refreshInventorySafely('submit-team');
 
   const cardCode = (req.body.cardCode || '').trim().toUpperCase();
   const email = normalizeEmail(req.body.email);
@@ -681,7 +742,7 @@ router.post('/submit-team', async (req, res) => {
  * GET /api/cdk/query/:taskId — Query task status
  */
 router.post('/submit-team-batch', async (req, res) => {
-  refreshInventoryInBackground();
+  refreshInventorySafely('submit-team-batch');
 
   const items = Array.isArray(req.body.items) ? req.body.items : [];
   if (!items.length) {
@@ -745,7 +806,7 @@ router.post('/submit-team-batch', async (req, res) => {
 });
 
 router.get('/query/:taskId', (req, res) => {
-  releaseStaleProcessingCdks();
+  runCdkMaintenanceSafely('query');
 
   const taskId = req.params.taskId;
   const task = db.prepare('SELECT * FROM cdk_tasks WHERE id = ?').get(taskId);
