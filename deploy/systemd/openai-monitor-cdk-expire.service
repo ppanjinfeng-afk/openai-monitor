@@ -1,0 +1,12 @@
+[Unit]
+Description=Expire old OpenAI Monitor CDKs
+After=openai-monitor.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/openai-monitor
+Environment=NODE_ENV=production
+Environment=CDK_EXPIRE_AFTER_DAYS=1
+ExecStart=/usr/bin/node /opt/openai-monitor/scripts/expire-old-cdks.js --days=1
+User=root
+Group=root
