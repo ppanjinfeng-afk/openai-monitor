@@ -1,0 +1,11 @@
+[Unit]
+Description=Run OpenAI Monitor CDK expiration every hour
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+Unit=openai-monitor-cdk-expire.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target
