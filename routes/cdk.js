@@ -357,7 +357,7 @@ function detachCdkReferences(cardIds) {
   ));
 
   if (ids.length === 0) {
-    return { taskRefs: 0, orderRefs: 0 };
+    return { taskRefs: 0, orderRefs: 0, orderItemRefs: 0 };
   }
 
   const placeholders = ids.map(() => '?').join(',');
@@ -371,8 +371,13 @@ function detachCdkReferences(cardIds) {
     SET cdk_id = NULL
     WHERE cdk_id IN (${placeholders})
   `).run(...ids).changes;
+  const orderItemRefs = db.prepare(`
+    UPDATE cdk_order_items
+    SET cdk_id = NULL
+    WHERE cdk_id IN (${placeholders})
+  `).run(...ids).changes;
 
-  return { taskRefs, orderRefs };
+  return { taskRefs, orderRefs, orderItemRefs };
 }
 
 // ============================================
@@ -510,6 +515,7 @@ router.delete('/:id(\\d+)', (req, res) => {
     deleted: result.deleted,
     detachedTasks: result.taskRefs,
     detachedOrders: result.orderRefs,
+    detachedOrderItems: result.orderItemRefs,
   });
 });
 
@@ -534,6 +540,7 @@ router.post('/batch-delete', (req, res) => {
     deleted: result.deleted,
     detachedTasks: result.taskRefs,
     detachedOrders: result.orderRefs,
+    detachedOrderItems: result.orderItemRefs,
   });
 });
 
