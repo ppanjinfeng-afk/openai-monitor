@@ -207,6 +207,93 @@ function findSuccessfulInviteForTask(taskOrId) {
   return null;
 }
 
+function findSuccessfulMemberForTask(taskOrId) {
+  const task = typeof taskOrId === 'object' && taskOrId
+    ? taskOrId
+    : db.prepare('SELECT * FROM cdk_tasks WHERE id = ?').get(taskOrId);
+
+  if (!task) {
+    return null;
+  }
+
+  const targetEmail = normalizeEmail(task.account_email);
+  if (!targetEmail) {
+    return null;
+  }
+
+  const storedResult = parseJsonSafely(task.invite_result_json);
+  const workspaceId = normalizeText(storedResult.workspace_id || storedResult.workspaceId);
+  const usedAccountId = storedResult.used_account_id || storedResult.account_id || null;
+  const params = {
+    taskId: normalizeText(task.id),
+    targetEmail,
+    workspaceId,
+    accountId: usedAccountId == null ? null : Number(usedAccountId),
+    createdAt: normalizeText(task.created_at),
+  };
+
+  const matches = db.prepare(`
+    SELECT
+      wm.*,
+      a.email AS account_email,
+      a.label AS account_label,
+      w.workspace_name AS workspace_name,
+      w.plan_type AS plan_type
+    FROM workspace_members wm
+    LEFT JOIN accounts a ON a.id = wm.account_id
+    LEFT JOIN workspaces w ON w.account_id = wm.account_id
+      AND w.workspace_id = wm.workspace_id
+    WHERE LOWER(wm.email) = LOWER(@targetEmail)
+      AND COALESCE(wm.deactivated_time, '') = ''
+      AND (@workspaceId = '' OR wm.workspace_id = @workspaceId)
+      AND (@accountId IS NULL OR wm.account_id = @accountId)
+      AND (
+        COALESCE(wm.source_cdk_task_id, '') = @taskId
+        OR @createdAt = ''
+        OR COALESCE(NULLIF(wm.joined_at, ''), NULLIF(wm.last_synced_at, ''), '') = ''
+        OR datetime(COALESCE(NULLIF(wm.joined_at, ''), NULLIF(wm.last_synced_at, '')))
+          >= datetime(@createdAt, '-30 minutes')
+      )
+    ORDER BY
+      CASE WHEN COALESCE(wm.source_cdk_task_id, '') = @taskId THEN 0 ELSE 1 END,
+      CASE WHEN @workspaceId != '' AND wm.workspace_id = @workspaceId THEN 0 ELSE 1 END,
+      datetime(COALESCE(NULLIF(wm.joined_at, ''), NULLIF(wm.last_synced_at, ''), '1970-01-01 00:00:00')) DESC,
+      wm.id DESC
+    LIMIT 1
+  `).get(params);
+
+  return matches || null;
+}
+
+function buildInviteResultFromMember(member = {}, task = {}) {
+  const workspaceId = normalizeText(member.workspace_id);
+  const workspaceName = normalizeText(member.workspace_name) || workspaceId;
+  const accountEmail = normalizeText(member.account_email);
+  const targetEmail = normalizeText(task.account_email || member.email);
+  const message = localizeTeamInviteSuccessMessage('', {
+    target_email: targetEmail,
+    workspace_name: workspaceName,
+  });
+
+  return {
+    success: true,
+    reconciled_from_member: true,
+    message,
+    used_account: accountEmail,
+    used_account_id: member.account_id || null,
+    requested_account_id: member.account_id || null,
+    remote_member_id: normalizeText(member.user_id),
+    remote_account_user_id: normalizeText(member.account_user_id),
+    delivery_type: 'member_reconcile',
+    workspace_id: workspaceId,
+    workspace_name: workspaceName,
+    cdk_task_id: normalizeText(task.id),
+    plan_type: normalizeText(member.plan_type),
+    status: 'accepted',
+    member_joined_at: normalizeText(member.joined_at),
+  };
+}
+
 function findFirstSuccessfulTaskForSameCdk(task) {
   let cdkCode = normalizeText(task.cdk_code);
   if (!cdkCode && task.cdk_id) {
@@ -298,6 +385,154 @@ function markCdkCardUsedForTask(task = {}) {
   `).run(assignedEmail, card.id).changes;
 
   return { changes, cdkId: card.id, cdkCode };
+}
+
+function resolveInviteAccountId(result = {}, workspaceId = '') {
+  const directId = Number(
+    result.used_account_id
+    || result.account_id
+    || result.requested_account_id
+    || 0
+  );
+  if (directId > 0) {
+    return directId;
+  }
+
+  const accountEmail = normalizeText(result.used_account || result.account_email);
+  if (accountEmail) {
+    const account = db.prepare('SELECT id FROM accounts WHERE LOWER(email) = LOWER(?) LIMIT 1').get(accountEmail);
+    if (account?.id) {
+      return Number(account.id);
+    }
+  }
+
+  const normalizedWorkspaceId = normalizeText(workspaceId || result.workspace_id || result.workspaceId);
+  if (normalizedWorkspaceId) {
+    const workspace = db.prepare(`
+      SELECT account_id
+      FROM workspaces
+      WHERE workspace_id = ?
+      ORDER BY datetime(COALESCE(NULLIF(updated_at, ''), created_at)) DESC
+      LIMIT 1
+    `).get(normalizedWorkspaceId);
+
+    if (workspace?.account_id) {
+      return Number(workspace.account_id);
+    }
+  }
+
+  return null;
+}
+
+function ensureInviteRecordForCompletedTask(task = {}, result = {}, message = '') {
+  const targetEmail = normalizeEmail(task.account_email || result.target_email || result.email);
+  const workspaceId = normalizeText(result.workspace_id || result.workspaceId);
+  const accountId = resolveInviteAccountId(result, workspaceId);
+
+  if (!accountId || !targetEmail || !workspaceId) {
+    return { changed: 0, reason: 'missing_invite_identity' };
+  }
+
+  const taskId = normalizeText(task.id || result.cdk_task_id || result.cdkTaskId);
+  const status = normalizeText(result.status) === 'accepted' || result.reconciled_from_member
+    ? 'accepted'
+    : 'sent';
+  const workspaceName = normalizeText(result.workspace_name || result.workspaceName);
+  const remoteInviteId = normalizeText(result.remote_invite_id || result.remoteInviteId);
+  const deliveryType = normalizeText(result.delivery_type) || (status === 'accepted' ? 'member_reconcile' : 'send');
+  const requestedAccountId = Number(result.requested_account_id || accountId) || accountId;
+  const fallbackFromAccountId = result.fallback_from_account_id || null;
+  const inviteMessage = normalizeText(message || result.message)
+    || buildTeamInviteSuccessMessage({ target_email: targetEmail, workspace_name: workspaceName || workspaceId });
+  const existing = db.prepare(`
+    SELECT id
+    FROM invites
+    WHERE (
+        COALESCE(cdk_task_id, '') = @taskId
+        OR (
+          account_id = @accountId
+          AND LOWER(target_email) = LOWER(@targetEmail)
+          AND COALESCE(workspace_id, '') = @workspaceId
+        )
+        OR (
+          @remoteInviteId != ''
+          AND COALESCE(remote_invite_id, '') = @remoteInviteId
+          AND LOWER(target_email) = LOWER(@targetEmail)
+        )
+      )
+    ORDER BY datetime(COALESCE(NULLIF(updated_at, ''), created_at)) DESC, id DESC
+    LIMIT 1
+  `).get({
+    taskId,
+    accountId,
+    targetEmail,
+    workspaceId,
+    remoteInviteId,
+  });
+
+  if (existing?.id) {
+    const changes = db.prepare(`
+      UPDATE invites
+      SET account_id = ?,
+          requested_account_id = COALESCE(?, requested_account_id),
+          fallback_from_account_id = COALESCE(?, fallback_from_account_id),
+          status = ?,
+          message = ?,
+          remote_invite_id = COALESCE(NULLIF(?, ''), remote_invite_id),
+          delivery_type = ?,
+          workspace_id = ?,
+          workspace_name = ?,
+          failure_category = '',
+          cdk_task_id = COALESCE(NULLIF(cdk_task_id, ''), ?),
+          updated_at = datetime('now')
+      WHERE id = ?
+    `).run(
+      accountId,
+      requestedAccountId,
+      fallbackFromAccountId,
+      status,
+      inviteMessage,
+      remoteInviteId,
+      deliveryType,
+      workspaceId,
+      workspaceName,
+      taskId,
+      existing.id
+    ).changes;
+
+    return { changed: changes, id: existing.id };
+  }
+
+  const insertInfo = db.prepare(`
+    INSERT INTO invites (
+      account_id,
+      requested_account_id,
+      fallback_from_account_id,
+      target_email,
+      status,
+      message,
+      remote_invite_id,
+      delivery_type,
+      workspace_id,
+      workspace_name,
+      failure_category,
+      cdk_task_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?)
+  `).run(
+    accountId,
+    requestedAccountId,
+    fallbackFromAccountId,
+    targetEmail,
+    status,
+    inviteMessage,
+    remoteInviteId,
+    deliveryType,
+    workspaceId,
+    workspaceName,
+    taskId
+  );
+
+  return { changed: 1, id: Number(insertInfo.lastInsertRowid) };
 }
 
 function buildTaskSourceIdentity(task = {}) {
@@ -584,6 +819,8 @@ function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
   });
   result.message = message;
   const resultJson = JSON.stringify(result);
+  let inviteLinkChanges = 0;
+  let ensuredInviteRecord = null;
 
   const complete = db.transaction(() => {
     db.prepare(`
@@ -605,14 +842,14 @@ function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
     const targetEmail = normalizeEmail(task.account_email);
 
     if (inviteId > 0) {
-      db.prepare(`
+      inviteLinkChanges += db.prepare(`
         UPDATE invites
         SET cdk_task_id = ?,
             updated_at = datetime('now')
         WHERE id = ?
           AND LOWER(target_email) = LOWER(?)
           AND (COALESCE(cdk_task_id, '') = '' OR cdk_task_id = ?)
-      `).run(normalizedTaskId, inviteId, targetEmail, normalizedTaskId);
+      `).run(normalizedTaskId, inviteId, targetEmail, normalizedTaskId).changes;
     } else if (remoteInviteId) {
       const matches = db.prepare(`
         SELECT id
@@ -626,12 +863,12 @@ function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
       `).all(remoteInviteId, targetEmail, normalizedTaskId);
 
       if (matches.length === 1) {
-        db.prepare(`
+        inviteLinkChanges += db.prepare(`
           UPDATE invites
           SET cdk_task_id = ?,
               updated_at = datetime('now')
           WHERE id = ?
-        `).run(normalizedTaskId, matches[0].id);
+        `).run(normalizedTaskId, matches[0].id).changes;
       }
     } else if (workspaceId && targetEmail) {
       const matches = db.prepare(`
@@ -646,15 +883,18 @@ function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
       `).all(workspaceId, targetEmail);
 
       if (matches.length === 1) {
-        db.prepare(`
+        inviteLinkChanges += db.prepare(`
           UPDATE invites
           SET cdk_task_id = ?,
               updated_at = datetime('now')
           WHERE id = ?
-        `).run(normalizedTaskId, matches[0].id);
+        `).run(normalizedTaskId, matches[0].id).changes;
       }
     }
 
+    if (inviteLinkChanges === 0) {
+      ensuredInviteRecord = ensureInviteRecordForCompletedTask(task, result, message);
+    }
   });
 
   complete();
@@ -666,25 +906,49 @@ function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
     completed: true,
     task,
     inviteResult: result,
+    ensuredInviteRecord,
     sourceBinding,
   };
 }
 
 function reconcileCdkTeamTaskSuccess(taskId, options = {}) {
-  const invite = findSuccessfulInviteForTask(taskId);
-  if (!invite) {
-    return { reconciled: false, reason: 'success_invite_not_found' };
+  const task = typeof taskId === 'object' && taskId
+    ? taskId
+    : db.prepare('SELECT * FROM cdk_tasks WHERE id = ?').get(taskId);
+
+  if (!task) {
+    return { reconciled: false, reason: 'task_not_found' };
+  }
+
+  const invite = findSuccessfulInviteForTask(task);
+  if (invite) {
+    const result = completeCdkTeamTask(
+      task.id,
+      buildInviteResultFromInvite(invite),
+      { source: options.source || 'invite_record_reconcile' }
+    );
+
+    return {
+      reconciled: Boolean(result.completed),
+      invite,
+      ...result,
+    };
+  }
+
+  const member = findSuccessfulMemberForTask(task);
+  if (!member) {
+    return { reconciled: false, reason: 'success_invite_or_member_not_found' };
   }
 
   const result = completeCdkTeamTask(
-    taskId,
-    buildInviteResultFromInvite(invite),
-    { source: options.source || 'invite_record_reconcile' }
+    task.id,
+    buildInviteResultFromMember(member, task),
+    { source: options.source || 'member_record_reconcile' }
   );
 
   return {
     reconciled: Boolean(result.completed),
-    invite,
+    member,
     ...result,
   };
 }
@@ -694,7 +958,9 @@ module.exports = {
   scheduleCdkTeamTaskCompletionRetry,
   reconcileCdkTeamTaskSuccess,
   findSuccessfulInviteForTask,
+  findSuccessfulMemberForTask,
   buildInviteResultFromInvite,
+  buildInviteResultFromMember,
   buildTeamInviteSuccessMessage,
   localizeTeamInviteSuccessMessage,
   bindTaskSourceToWorkspaceRows,
