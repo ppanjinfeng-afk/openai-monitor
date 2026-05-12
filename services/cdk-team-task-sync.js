@@ -217,6 +217,164 @@ function getTaskCdkIdentity(task = {}) {
   return cdkId > 0 ? `id:${cdkId}` : '';
 }
 
+function canUseEmailTimeFallbackForTask(task = {}, targetEmail = '', createdAt = '') {
+  const currentCdkIdentity = getTaskCdkIdentity(task);
+  if (!currentCdkIdentity || !targetEmail || !createdAt) {
+    return false;
+  }
+
+  const nearbyTasks = db.prepare(`
+    SELECT
+      t.id,
+      t.cdk_id,
+      COALESCE(NULLIF(TRIM(t.cdk_code), ''), c.code, '') AS cdk_code
+    FROM cdk_tasks t
+    LEFT JOIN cdk_cards c ON c.id = t.cdk_id
+    WHERE t.task_type = 'team_invite'
+      AND LOWER(t.account_email) = LOWER(@targetEmail)
+      AND UPPER(COALESCE(t.status, '')) IN ('FAILED', 'PENDING', 'PROCESSING')
+      AND datetime(COALESCE(NULLIF(t.created_at, ''), NULLIF(t.updated_at, ''), '1970-01-01 00:00:00'))
+        BETWEEN datetime(@createdAt, '-30 minutes') AND datetime(@createdAt, '+30 minutes')
+    ORDER BY datetime(COALESCE(NULLIF(t.created_at, ''), NULLIF(t.updated_at, ''), '1970-01-01 00:00:00')) DESC,
+             t.id DESC
+    LIMIT 20
+  `).all({ targetEmail, createdAt });
+
+  const nearbyTaskIdentities = new Set(
+    nearbyTasks
+      .map(getTaskCdkIdentity)
+      .filter(Boolean)
+  );
+
+  return nearbyTasks.length > 0
+    && nearbyTasks.some(row => normalizeText(row.id) === normalizeText(task.id))
+    && nearbyTaskIdentities.size === 1
+    && nearbyTaskIdentities.has(currentCdkIdentity);
+}
+
+function findSuccessfulPendingInviteForTask(taskOrId) {
+  const task = typeof taskOrId === 'object' && taskOrId
+    ? taskOrId
+    : db.prepare('SELECT * FROM cdk_tasks WHERE id = ?').get(taskOrId);
+
+  if (!task) {
+    return null;
+  }
+
+  const targetEmail = normalizeEmail(task.account_email);
+  if (!targetEmail) {
+    return null;
+  }
+
+  const storedResult = parseJsonSafely(task.invite_result_json);
+  const workspaceId = normalizeText(storedResult.workspace_id || storedResult.workspaceId);
+  const remoteInviteId = normalizeText(storedResult.remote_invite_id || storedResult.remoteInviteId);
+  const usedAccountId = storedResult.used_account_id || storedResult.account_id || null;
+  const params = {
+    taskId: normalizeText(task.id),
+    targetEmail,
+    workspaceId,
+    remoteInviteId,
+    accountId: usedAccountId == null ? null : Number(usedAccountId),
+    createdAt: normalizeText(task.created_at),
+  };
+
+  const selectPendingSql = `
+    SELECT
+      wp.*,
+      a.email AS account_email,
+      a.label AS account_label,
+      w.workspace_name AS workspace_name,
+      w.plan_type AS plan_type
+    FROM workspace_pending_invites wp
+    LEFT JOIN accounts a ON a.id = wp.account_id
+    LEFT JOIN workspaces w ON w.account_id = wp.account_id
+      AND w.workspace_id = wp.workspace_id
+  `;
+
+  const linkedPending = db.prepare(`
+    ${selectPendingSql}
+    WHERE LOWER(wp.email) = LOWER(@targetEmail)
+      AND COALESCE(wp.source_cdk_task_id, '') = @taskId
+    ORDER BY datetime(COALESCE(NULLIF(wp.invited_at, ''), NULLIF(wp.last_synced_at, ''), '1970-01-01 00:00:00')) DESC,
+             wp.id DESC
+    LIMIT 1
+  `).get(params);
+
+  if (linkedPending) {
+    return linkedPending;
+  }
+
+  if (remoteInviteId || workspaceId || usedAccountId) {
+    const contextualMatches = db.prepare(`
+      ${selectPendingSql}
+      WHERE LOWER(wp.email) = LOWER(@targetEmail)
+        AND (@remoteInviteId = '' OR COALESCE(wp.remote_invite_id, '') = @remoteInviteId)
+        AND (@workspaceId = '' OR wp.workspace_id = @workspaceId)
+        AND (@accountId IS NULL OR wp.account_id = @accountId)
+        AND (
+          @createdAt = ''
+          OR (
+            COALESCE(NULLIF(wp.invited_at, ''), NULLIF(wp.last_synced_at, ''), '') != ''
+            AND datetime(COALESCE(NULLIF(wp.invited_at, ''), NULLIF(wp.last_synced_at, '')))
+              >= datetime(@createdAt, '-30 minutes')
+          )
+        )
+      ORDER BY
+        CASE WHEN @remoteInviteId != '' AND COALESCE(wp.remote_invite_id, '') = @remoteInviteId THEN 0 ELSE 1 END,
+        CASE WHEN @workspaceId != '' AND wp.workspace_id = @workspaceId THEN 0 ELSE 1 END,
+        datetime(COALESCE(NULLIF(wp.invited_at, ''), NULLIF(wp.last_synced_at, ''), '1970-01-01 00:00:00')) DESC,
+        wp.id DESC
+      LIMIT 2
+    `).all(params);
+
+    return contextualMatches.length === 1 ? contextualMatches[0] : null;
+  }
+
+  if (!canUseEmailTimeFallbackForTask(task, targetEmail, params.createdAt)) {
+    return null;
+  }
+
+  return db.prepare(`
+    ${selectPendingSql}
+    WHERE LOWER(wp.email) = LOWER(@targetEmail)
+      AND COALESCE(NULLIF(wp.invited_at, ''), NULLIF(wp.last_synced_at, ''), '') != ''
+      AND datetime(COALESCE(NULLIF(wp.invited_at, ''), NULLIF(wp.last_synced_at, '')))
+        >= datetime(@createdAt, '-30 minutes')
+    ORDER BY datetime(COALESCE(NULLIF(wp.invited_at, ''), NULLIF(wp.last_synced_at, ''), '1970-01-01 00:00:00')) DESC,
+             wp.id DESC
+    LIMIT 1
+  `).get(params) || null;
+}
+
+function buildInviteResultFromPendingInvite(pending = {}, task = {}) {
+  const workspaceId = normalizeText(pending.workspace_id);
+  const workspaceName = normalizeText(pending.workspace_name) || workspaceId;
+  const accountEmail = normalizeText(pending.account_email);
+  const targetEmail = normalizeText(task.account_email || pending.email);
+  const message = localizeTeamInviteSuccessMessage('', {
+    target_email: targetEmail,
+    workspace_name: workspaceName,
+  });
+
+  return {
+    success: true,
+    reconciled_from_pending_invite: true,
+    message,
+    used_account: accountEmail,
+    used_account_id: pending.account_id || null,
+    requested_account_id: pending.account_id || null,
+    remote_invite_id: normalizeText(pending.remote_invite_id),
+    delivery_type: 'pending_invite_reconcile',
+    workspace_id: workspaceId,
+    workspace_name: workspaceName,
+    cdk_task_id: normalizeText(task.id),
+    plan_type: normalizeText(pending.plan_type),
+    status: 'sent',
+    invited_at: normalizeText(pending.invited_at),
+  };
+}
+
 function findSuccessfulMemberForTask(taskOrId) {
   const task = typeof taskOrId === 'object' && taskOrId
     ? taskOrId
@@ -298,40 +456,7 @@ function findSuccessfulMemberForTask(taskOrId) {
     return null;
   }
 
-  const currentCdkIdentity = getTaskCdkIdentity(task);
-  if (!currentCdkIdentity) {
-    return null;
-  }
-
-  const nearbyTasks = db.prepare(`
-    SELECT
-      t.id,
-      t.cdk_id,
-      COALESCE(NULLIF(TRIM(t.cdk_code), ''), c.code, '') AS cdk_code
-    FROM cdk_tasks t
-    LEFT JOIN cdk_cards c ON c.id = t.cdk_id
-    WHERE t.task_type = 'team_invite'
-      AND LOWER(t.account_email) = LOWER(@targetEmail)
-      AND UPPER(COALESCE(t.status, '')) IN ('FAILED', 'PENDING', 'PROCESSING')
-      AND datetime(COALESCE(NULLIF(t.created_at, ''), NULLIF(t.updated_at, ''), '1970-01-01 00:00:00'))
-        BETWEEN datetime(@createdAt, '-30 minutes') AND datetime(@createdAt, '+30 minutes')
-    ORDER BY datetime(COALESCE(NULLIF(t.created_at, ''), NULLIF(t.updated_at, ''), '1970-01-01 00:00:00')) DESC,
-             t.id DESC
-    LIMIT 20
-  `).all(params);
-
-  const nearbyTaskIdentities = new Set(
-    nearbyTasks
-      .map(getTaskCdkIdentity)
-      .filter(Boolean)
-  );
-
-  if (
-    nearbyTasks.length === 0
-    || !nearbyTasks.some(row => normalizeText(row.id) === params.taskId)
-    || nearbyTaskIdentities.size !== 1
-    || !nearbyTaskIdentities.has(currentCdkIdentity)
-  ) {
+  if (!canUseEmailTimeFallbackForTask(task, targetEmail, params.createdAt)) {
     return null;
   }
 
@@ -1021,9 +1146,24 @@ function reconcileCdkTeamTaskSuccess(taskId, options = {}) {
     };
   }
 
+  const pendingInvite = findSuccessfulPendingInviteForTask(task);
+  if (pendingInvite) {
+    const result = completeCdkTeamTask(
+      task.id,
+      buildInviteResultFromPendingInvite(pendingInvite, task),
+      { source: options.source || 'pending_invite_reconcile' }
+    );
+
+    return {
+      reconciled: Boolean(result.completed),
+      pendingInvite,
+      ...result,
+    };
+  }
+
   const member = findSuccessfulMemberForTask(task);
   if (!member) {
-    return { reconciled: false, reason: 'success_invite_or_member_not_found' };
+    return { reconciled: false, reason: 'success_invite_pending_or_member_not_found' };
   }
 
   const result = completeCdkTeamTask(
@@ -1044,8 +1184,10 @@ module.exports = {
   scheduleCdkTeamTaskCompletionRetry,
   reconcileCdkTeamTaskSuccess,
   findSuccessfulInviteForTask,
+  findSuccessfulPendingInviteForTask,
   findSuccessfulMemberForTask,
   buildInviteResultFromInvite,
+  buildInviteResultFromPendingInvite,
   buildInviteResultFromMember,
   buildTeamInviteSuccessMessage,
   localizeTeamInviteSuccessMessage,
