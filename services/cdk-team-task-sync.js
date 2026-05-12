@@ -232,7 +232,7 @@ function findSuccessfulMemberForTask(taskOrId) {
     createdAt: normalizeText(task.created_at),
   };
 
-  const matches = db.prepare(`
+  const selectMemberSql = `
     SELECT
       wm.*,
       a.email AS account_email,
@@ -243,26 +243,82 @@ function findSuccessfulMemberForTask(taskOrId) {
     LEFT JOIN accounts a ON a.id = wm.account_id
     LEFT JOIN workspaces w ON w.account_id = wm.account_id
       AND w.workspace_id = wm.workspace_id
+  `;
+
+  const linkedMember = db.prepare(`
+    ${selectMemberSql}
     WHERE LOWER(wm.email) = LOWER(@targetEmail)
       AND COALESCE(wm.deactivated_time, '') = ''
-      AND (@workspaceId = '' OR wm.workspace_id = @workspaceId)
-      AND (@accountId IS NULL OR wm.account_id = @accountId)
-      AND (
-        COALESCE(wm.source_cdk_task_id, '') = @taskId
-        OR @createdAt = ''
-        OR COALESCE(NULLIF(wm.joined_at, ''), NULLIF(wm.last_synced_at, ''), '') = ''
-        OR datetime(COALESCE(NULLIF(wm.joined_at, ''), NULLIF(wm.last_synced_at, '')))
-          >= datetime(@createdAt, '-30 minutes')
-      )
-    ORDER BY
-      CASE WHEN COALESCE(wm.source_cdk_task_id, '') = @taskId THEN 0 ELSE 1 END,
-      CASE WHEN @workspaceId != '' AND wm.workspace_id = @workspaceId THEN 0 ELSE 1 END,
-      datetime(COALESCE(NULLIF(wm.joined_at, ''), NULLIF(wm.last_synced_at, ''), '1970-01-01 00:00:00')) DESC,
-      wm.id DESC
+      AND COALESCE(wm.source_cdk_task_id, '') = @taskId
+    ORDER BY datetime(COALESCE(NULLIF(wm.joined_at, ''), NULLIF(wm.last_synced_at, ''), '1970-01-01 00:00:00')) DESC,
+             wm.id DESC
     LIMIT 1
   `).get(params);
 
-  return matches || null;
+  if (linkedMember) {
+    return linkedMember;
+  }
+
+  if (workspaceId || usedAccountId) {
+    const contextualMatches = db.prepare(`
+      ${selectMemberSql}
+      WHERE LOWER(wm.email) = LOWER(@targetEmail)
+        AND COALESCE(wm.deactivated_time, '') = ''
+        AND (@workspaceId = '' OR wm.workspace_id = @workspaceId)
+        AND (@accountId IS NULL OR wm.account_id = @accountId)
+        AND (
+          @createdAt = ''
+          OR (
+            COALESCE(NULLIF(wm.joined_at, ''), NULLIF(wm.last_synced_at, ''), '') != ''
+            AND datetime(COALESCE(NULLIF(wm.joined_at, ''), NULLIF(wm.last_synced_at, '')))
+              >= datetime(@createdAt, '-30 minutes')
+          )
+        )
+      ORDER BY
+        CASE WHEN @workspaceId != '' AND wm.workspace_id = @workspaceId THEN 0 ELSE 1 END,
+        datetime(COALESCE(NULLIF(wm.joined_at, ''), NULLIF(wm.last_synced_at, ''), '1970-01-01 00:00:00')) DESC,
+        wm.id DESC
+      LIMIT 2
+    `).all(params);
+
+    return contextualMatches.length === 1 ? contextualMatches[0] : null;
+  }
+
+  if (!params.createdAt) {
+    return null;
+  }
+
+  const nearbyTasks = db.prepare(`
+    SELECT id
+    FROM cdk_tasks
+    WHERE task_type = 'team_invite'
+      AND LOWER(account_email) = LOWER(@targetEmail)
+      AND UPPER(COALESCE(status, '')) IN ('FAILED', 'PENDING', 'PROCESSING')
+      AND datetime(COALESCE(NULLIF(created_at, ''), NULLIF(updated_at, ''), '1970-01-01 00:00:00'))
+        BETWEEN datetime(@createdAt, '-30 minutes') AND datetime(@createdAt, '+30 minutes')
+    ORDER BY datetime(COALESCE(NULLIF(created_at, ''), NULLIF(updated_at, ''), '1970-01-01 00:00:00')) DESC,
+             id DESC
+    LIMIT 2
+  `).all(params);
+
+  if (nearbyTasks.length !== 1 || normalizeText(nearbyTasks[0].id) !== params.taskId) {
+    return null;
+  }
+
+  const uniqueRecentMembers = db.prepare(`
+    ${selectMemberSql}
+    WHERE LOWER(wm.email) = LOWER(@targetEmail)
+      AND COALESCE(wm.deactivated_time, '') = ''
+      AND COALESCE(NULLIF(wm.joined_at, ''), NULLIF(wm.last_synced_at, ''), '') != ''
+      AND datetime(COALESCE(NULLIF(wm.joined_at, ''), NULLIF(wm.last_synced_at, '')))
+        >= datetime(@createdAt, '-30 minutes')
+    ORDER BY
+      datetime(COALESCE(NULLIF(wm.joined_at, ''), NULLIF(wm.last_synced_at, ''), '1970-01-01 00:00:00')) DESC,
+      wm.id DESC
+    LIMIT 2
+  `).all(params);
+
+  return uniqueRecentMembers.length === 1 ? uniqueRecentMembers[0] : null;
 }
 
 function buildInviteResultFromMember(member = {}, task = {}) {
