@@ -311,6 +311,21 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
         );
       };
       const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
+      const formatInviteSuccessMessage = (emailAddress, options = {}) => {
+        const email = String(emailAddress || '').trim();
+        const target = email ? `至 ${email}` : '';
+        const suffix = '，请检查邮箱并接受 Team 邀请';
+
+        if (options.wasResend) {
+          return `Team 邀请已重新发送${target}${suffix}`;
+        }
+
+        if (options.alreadyPending) {
+          return `该邮箱已有待接受的 Team 邀请${target}${suffix}`;
+        }
+
+        return `Team 邀请已发送${target}${suffix}`;
+      };
 
       const getHeaders = (workspaceId, extraHeaders = {}) => {
         const headers = {
@@ -701,17 +716,45 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
         };
       };
 
-      const createInvite = async (workspaceId) => {
-        const inviteRes = await fetchWithTimeout(`https://chatgpt.com/backend-api/accounts/${workspaceId}/invites`, {
-          method: 'POST',
-          headers: getHeaders(workspaceId, {
-            'Content-Type': 'application/json',
-          }),
-          body: JSON.stringify({
-            email_addresses: [emailToInvite],
-            role: 'standard-user',
-          }),
-        });
+      const createInvite = async (workspaceId, workspaceName = '', planType = '') => {
+        let inviteRes = null;
+        try {
+          inviteRes = await fetchWithTimeout(`https://chatgpt.com/backend-api/accounts/${workspaceId}/invites`, {
+            method: 'POST',
+            headers: getHeaders(workspaceId, {
+              'Content-Type': 'application/json',
+            }),
+            body: JSON.stringify({
+              email_addresses: [emailToInvite],
+              role: 'standard-user',
+            }),
+          });
+        } catch (err) {
+          const remoteInviteResult = await findInviteByEmailWithRetry(workspaceId, emailToInvite).catch(lookupErr => ({
+            success: false,
+            message: lookupErr.message,
+          }));
+
+          if (remoteInviteResult.success && remoteInviteResult.invite) {
+            return {
+              success: true,
+              createdNewInvite: true,
+              invite: remoteInviteResult.invite,
+            };
+          }
+
+          return {
+            success: false,
+            code: 'invite_confirmation_pending',
+            invitationMayHaveBeenSent: true,
+            stopFallback: true,
+            workspaceId,
+            workspaceName,
+            planType,
+            message: `Team 邀请请求可能已发出，但确认 timeout，正在等待工作区同步：${err.message}`,
+          };
+        }
+
         const parsed = await parseResponse(inviteRes);
 
         const message = extractErrorMessage(parsed.data) || parsed.text || `HTTP ${inviteRes.status}`;
@@ -742,7 +785,18 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
 
         const remoteInviteResult = await findInviteByEmailWithRetry(workspaceId, emailToInvite);
         if (!remoteInviteResult.success) {
-          return remoteInviteResult;
+          return {
+            success: true,
+            createdNewInvite: true,
+            materializationPending: true,
+            invitationMayHaveBeenSent: true,
+            stopFallback: true,
+            workspaceId,
+            workspaceName,
+            planType,
+            message: formatInviteSuccessMessage(emailToInvite),
+            warning: remoteInviteResult.message,
+          };
         }
 
         if (remoteInviteResult.invite) {
@@ -767,6 +821,11 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
           createdNewInvite: true,
           materializationPending: true,
           invite: null,
+          invitationMayHaveBeenSent: true,
+          stopFallback: true,
+          workspaceId,
+          workspaceName,
+          planType,
         };
       };
 
@@ -811,7 +870,7 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
         };
       }
 
-      let createResult = await createInvite(workspaceId);
+      let createResult = await createInvite(workspaceId, workspaceName, planType);
 
       if (!createResult.success && createResult.isDuplicate) {
         const duplicateInviteResult = await findInviteByEmail(workspaceId, emailToInvite);
@@ -856,7 +915,7 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
         }
 
         if (revokeResult.found) {
-          createResult = await createInvite(workspaceId);
+          createResult = await createInvite(workspaceId, workspaceName, planType);
         }
       }
 

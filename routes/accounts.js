@@ -1806,13 +1806,21 @@ function formatInviteFailure(attempts) {
 function shouldFallbackInviteResult(result) {
   const code = String(result?.code || '').trim().toLowerCase();
   const message = String(result?.message || '').trim().toLowerCase();
+
+  if (
+    result?.stopFallback
+    || result?.stop_fallback
+    || result?.invitationMayHaveBeenSent
+    || result?.invitation_may_have_been_sent
+  ) {
+    return false;
+  }
+
   return code === 'invite_not_materialized'
     || code === 'capacity_full'
     || code === 'workspace_lookup_failed'
     || code === 'invite_lookup_failed'
     || code === 'user_lookup_failed'
-    || code === 'browser_script_timeout'
-    || code === 'browser_script_failed'
     || (code === 'create_failed' && (
       message.includes('deactivated_workspace')
       || message.includes('workspace not found')
@@ -1826,8 +1834,6 @@ function shouldFallbackInviteResult(result) {
     || message.includes('workspace not found')
     || message.includes('invalidated oauth token')
     || message.includes('encountered invalidated oauth token')
-    || message.includes('browser script failed')
-    || message.includes('request timeout')
     || message.includes('http 401')
     || message.includes('http 402')
     || message.includes('http 403')
@@ -1946,6 +1952,10 @@ async function sendInviteWithFallback(primaryAccount, targetEmail, options = {})
     if (fallbackResult.success) {
       return { account: fallbackAccount, result: fallbackResult, attempts };
     }
+
+    if (!shouldFallbackInviteResult(fallbackResult)) {
+      return { account: fallbackAccount, result: fallbackResult, attempts };
+    }
   }
 
   return {
@@ -1993,6 +2003,16 @@ async function sendInviteWithWorkspaceCandidates(targetEmail, workspaceCandidate
     }
 
     releaseWorkspaceSlot(reservation);
+    if (!shouldFallbackInviteResult(result)) {
+      return {
+        account: candidate.account,
+        result,
+        attempts,
+        reservation: null,
+        workspaceCandidate: candidate,
+      };
+    }
+
     lastFailure = {
       account: candidate.account,
       result,
