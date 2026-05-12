@@ -1596,7 +1596,17 @@ function persistInviteSuccess(account, targetEmail, result) {
   const remoteInviteId = result.remote_invite_id || '';
   const deliveryType = result.delivery_type || (result.wasResend ? 'resend' : 'send');
   const failureCategory = result.failure_category || '';
-  const cdkTaskId = String(result.cdk_task_id || result.cdkTaskId || '').trim();
+  let cdkTaskId = String(result.cdk_task_id || result.cdkTaskId || '').trim();
+  if (!cdkTaskId) {
+    cdkTaskId = findCdkTeamTaskForInvite({
+      ...result,
+      target_email: targetEmail,
+    });
+    if (cdkTaskId) {
+      result.cdk_task_id = cdkTaskId;
+      result.cdkTaskId = cdkTaskId;
+    }
+  }
   const normalizedTargetEmail = normalizeEmail(targetEmail);
   const existingForTask = cdkTaskId
     ? db.prepare(`
@@ -1665,11 +1675,54 @@ function persistInviteSuccess(account, targetEmail, result) {
   return shouldInsertSeparateRecord ? null : existing;
 }
 
+function normalizeCdkCode(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function findCdkTeamTaskForInvite(result = {}) {
+  const explicitTaskId = String(result.cdk_task_id || result.cdkTaskId || '').trim();
+  if (explicitTaskId) {
+    return explicitTaskId;
+  }
+
+  const targetEmail = normalizeEmail(result.target_email || result.email || result.account_email).toLowerCase();
+  const cdkCode = normalizeCdkCode(result.cdk_code || result.cdkCode);
+  const cdkId = Number(result.cdk_id || result.cdkId || 0);
+
+  if (!targetEmail || (!cdkCode && !cdkId)) {
+    return '';
+  }
+
+  const params = {
+    targetEmail,
+    cdkCode,
+    cdkId: cdkId > 0 ? cdkId : null,
+  };
+  const task = db.prepare(`
+    SELECT id
+    FROM cdk_tasks
+    WHERE task_type = 'team_invite'
+      AND LOWER(account_email) = LOWER(@targetEmail)
+      AND UPPER(status) IN ('PENDING', 'PROCESSING', 'FAILED')
+      AND (
+        (@cdkId IS NOT NULL AND cdk_id = @cdkId)
+        OR (@cdkCode != '' AND UPPER(TRIM(cdk_code)) = @cdkCode)
+      )
+    ORDER BY datetime(COALESCE(NULLIF(updated_at, ''), created_at)) DESC
+    LIMIT 1
+  `).get(params);
+
+  return String(task?.id || '').trim();
+}
+
 function syncCdkTeamTaskAfterInvite(cdkTaskId, finalResult, source) {
-  const normalizedTaskId = String(cdkTaskId || '').trim();
+  const normalizedTaskId = String(cdkTaskId || findCdkTeamTaskForInvite(finalResult) || '').trim();
   if (!normalizedTaskId) {
     return null;
   }
+
+  finalResult.cdk_task_id = normalizedTaskId;
+  finalResult.cdkTaskId = normalizedTaskId;
 
   try {
     const syncResult = completeCdkTeamTask(normalizedTaskId, finalResult, { source });
@@ -2593,9 +2646,14 @@ router.post('/:id(\\d+)/invite', async (req, res) => {
     if (result.success) {
       const fallbackUsed = usedAccount.id !== account.id;
       const cdkTaskId = String(req.body.cdk_task_id || req.body.cdkTaskId || '').trim();
+      const requestCdkId = req.body.cdk_id || req.body.cdkId || '';
+      const requestCdkCode = normalizeCdkCode(req.body.cdk_code || req.body.cdkCode || '');
       const finalResult = {
         ...result,
+        target_email: targetEmail,
         cdk_task_id: cdkTaskId || result.cdk_task_id || result.cdkTaskId || '',
+        cdk_id: requestCdkId || result.cdk_id || result.cdkId || '',
+        cdk_code: requestCdkCode || result.cdk_code || result.cdkCode || '',
         requested_account_id: account.id,
         fallback_from_account_id: fallbackUsed ? account.id : null,
         remote_invite_id: result.remoteInviteId || result.remote_invite_id || '',
@@ -2921,9 +2979,14 @@ router.post('/auto-invite', async (req, res) => {
     if (result.success) {
       const fallbackUsed = usedAccount.id !== account.id;
       const cdkTaskId = String(req.body.cdk_task_id || req.body.cdkTaskId || '').trim();
+      const requestCdkId = req.body.cdk_id || req.body.cdkId || '';
+      const requestCdkCode = normalizeCdkCode(req.body.cdk_code || req.body.cdkCode || '');
       const finalResult = {
         ...result,
+        target_email: targetEmail,
         cdk_task_id: cdkTaskId || result.cdk_task_id || result.cdkTaskId || '',
+        cdk_id: requestCdkId || result.cdk_id || result.cdkId || '',
+        cdk_code: requestCdkCode || result.cdk_code || result.cdkCode || '',
         requested_account_id: account.id,
         fallback_from_account_id: fallbackUsed ? account.id : null,
         remote_invite_id: result.remoteInviteId || result.remote_invite_id || '',

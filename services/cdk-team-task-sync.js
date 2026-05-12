@@ -252,6 +252,54 @@ function getTaskCdkCode(task = {}) {
   return cdkCode;
 }
 
+function markCdkCardUsedForTask(task = {}) {
+  const cdkId = Number(task.cdk_id || 0);
+  const cdkCode = getTaskCdkCode(task);
+  const assignedEmail = task.account_email || '';
+
+  if (cdkId > 0) {
+    const changes = db.prepare(`
+      UPDATE cdk_cards
+      SET status = 'used',
+          assigned_email = ?,
+          used_at = COALESCE(used_at, datetime('now')),
+          updated_at = datetime('now')
+      WHERE id = ?
+    `).run(assignedEmail, cdkId).changes;
+
+    return { changes, cdkId, cdkCode };
+  }
+
+  if (!cdkCode) {
+    return { changes: 0, cdkId: null, cdkCode: '' };
+  }
+
+  const card = db.prepare('SELECT id FROM cdk_cards WHERE code = ?').get(cdkCode);
+  if (!card?.id) {
+    return { changes: 0, cdkId: null, cdkCode };
+  }
+
+  if (task.id) {
+    db.prepare(`
+      UPDATE cdk_tasks
+      SET cdk_id = ?
+      WHERE id = ?
+        AND cdk_id IS NULL
+    `).run(card.id, task.id);
+  }
+
+  const changes = db.prepare(`
+    UPDATE cdk_cards
+    SET status = 'used',
+        assigned_email = ?,
+        used_at = COALESCE(used_at, datetime('now')),
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(assignedEmail, card.id).changes;
+
+  return { changes, cdkId: card.id, cdkCode };
+}
+
 function buildTaskSourceIdentity(task = {}) {
   const taskId = normalizeText(task.id);
   const cdkCode = getTaskCdkCode(task);
@@ -549,16 +597,7 @@ function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
       WHERE id = ?
     `).run(message, resultJson, normalizedTaskId);
 
-    if (task.cdk_id) {
-      db.prepare(`
-        UPDATE cdk_cards
-        SET status = 'used',
-            assigned_email = ?,
-            used_at = COALESCE(used_at, datetime('now')),
-            updated_at = datetime('now')
-        WHERE id = ?
-      `).run(task.account_email || '', task.cdk_id);
-    }
+    markCdkCardUsedForTask(task);
 
     const inviteId = Number(result.invite_id || result.inviteId || 0);
     const remoteInviteId = normalizeText(result.remote_invite_id || result.remoteInviteId);

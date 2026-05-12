@@ -621,6 +621,21 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
         return { success: true, invite };
       };
 
+      const findInviteByEmailWithRetry = async (workspaceId, emailAddress, attempts = 4, delayMs = 1500) => {
+        let lastResult = null;
+
+        for (let attempt = 1; attempt <= attempts; attempt += 1) {
+          lastResult = await findInviteByEmail(workspaceId, emailAddress);
+          if (!lastResult.success || lastResult.invite || attempt === attempts) {
+            return lastResult;
+          }
+
+          await sleep(delayMs);
+        }
+
+        return lastResult || { success: true, invite: null };
+      };
+
       const resendInviteById = async (workspaceId, inviteId) => {
         if (!inviteId) {
           return {
@@ -725,7 +740,7 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
           };
         }
 
-        const remoteInviteResult = await findInviteByEmail(workspaceId, emailToInvite);
+        const remoteInviteResult = await findInviteByEmailWithRetry(workspaceId, emailToInvite);
         if (!remoteInviteResult.success) {
           return remoteInviteResult;
         }
@@ -748,9 +763,10 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
         }
 
         return {
-          success: false,
-          code: 'invite_not_materialized',
-          message: `OpenAI accepted the invite request but did not create a pending invite for ${emailToInvite}`,
+          success: true,
+          createdNewInvite: true,
+          materializationPending: true,
+          invite: null,
         };
       };
 
