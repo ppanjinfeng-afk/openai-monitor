@@ -207,6 +207,16 @@ function findSuccessfulInviteForTask(taskOrId) {
   return null;
 }
 
+function getTaskCdkIdentity(task = {}) {
+  const cdkCode = getTaskCdkCode(task);
+  if (cdkCode) {
+    return `code:${cdkCode.toLowerCase()}`;
+  }
+
+  const cdkId = Number(task.cdk_id || 0);
+  return cdkId > 0 ? `id:${cdkId}` : '';
+}
+
 function findSuccessfulMemberForTask(taskOrId) {
   const task = typeof taskOrId === 'object' && taskOrId
     ? taskOrId
@@ -288,20 +298,40 @@ function findSuccessfulMemberForTask(taskOrId) {
     return null;
   }
 
+  const currentCdkIdentity = getTaskCdkIdentity(task);
+  if (!currentCdkIdentity) {
+    return null;
+  }
+
   const nearbyTasks = db.prepare(`
-    SELECT id
-    FROM cdk_tasks
-    WHERE task_type = 'team_invite'
-      AND LOWER(account_email) = LOWER(@targetEmail)
-      AND UPPER(COALESCE(status, '')) IN ('FAILED', 'PENDING', 'PROCESSING')
-      AND datetime(COALESCE(NULLIF(created_at, ''), NULLIF(updated_at, ''), '1970-01-01 00:00:00'))
+    SELECT
+      t.id,
+      t.cdk_id,
+      COALESCE(NULLIF(TRIM(t.cdk_code), ''), c.code, '') AS cdk_code
+    FROM cdk_tasks t
+    LEFT JOIN cdk_cards c ON c.id = t.cdk_id
+    WHERE t.task_type = 'team_invite'
+      AND LOWER(t.account_email) = LOWER(@targetEmail)
+      AND UPPER(COALESCE(t.status, '')) IN ('FAILED', 'PENDING', 'PROCESSING')
+      AND datetime(COALESCE(NULLIF(t.created_at, ''), NULLIF(t.updated_at, ''), '1970-01-01 00:00:00'))
         BETWEEN datetime(@createdAt, '-30 minutes') AND datetime(@createdAt, '+30 minutes')
-    ORDER BY datetime(COALESCE(NULLIF(created_at, ''), NULLIF(updated_at, ''), '1970-01-01 00:00:00')) DESC,
-             id DESC
-    LIMIT 2
+    ORDER BY datetime(COALESCE(NULLIF(t.created_at, ''), NULLIF(t.updated_at, ''), '1970-01-01 00:00:00')) DESC,
+             t.id DESC
+    LIMIT 20
   `).all(params);
 
-  if (nearbyTasks.length !== 1 || normalizeText(nearbyTasks[0].id) !== params.taskId) {
+  const nearbyTaskIdentities = new Set(
+    nearbyTasks
+      .map(getTaskCdkIdentity)
+      .filter(Boolean)
+  );
+
+  if (
+    nearbyTasks.length === 0
+    || !nearbyTasks.some(row => normalizeText(row.id) === params.taskId)
+    || nearbyTaskIdentities.size !== 1
+    || !nearbyTaskIdentities.has(currentCdkIdentity)
+  ) {
     return null;
   }
 
