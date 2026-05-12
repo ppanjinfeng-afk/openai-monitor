@@ -2605,7 +2605,7 @@ router.post('/:id(\\d+)/invite', async (req, res) => {
         plan_type: result.planType || result.plan_type || '',
         failure_category: '',
         message: fallbackUsed
-          ? `${result.message} (fallback account: ${usedAccount.email})`
+          ? `${result.message}（备用账号：${usedAccount.email}）`
           : result.message,
       };
       const existing = persistInviteSuccess(usedAccount, targetEmail, finalResult);
@@ -2933,7 +2933,7 @@ router.post('/auto-invite', async (req, res) => {
         plan_type: result.planType || result.plan_type || '',
         failure_category: '',
         message: fallbackUsed
-          ? `${result.message} (fallback account: ${usedAccount.email})`
+          ? `${result.message}（备用账号：${usedAccount.email}）`
           : result.message,
       };
       const existing = persistInviteSuccess(usedAccount, targetEmail, finalResult);

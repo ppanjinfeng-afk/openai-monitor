@@ -54,6 +54,22 @@ let sharedInviteBrowserLaunchPromise = null;
 let sharedInviteBrowserIdleTimer = null;
 let sharedInviteBrowserUseCount = 0;
 
+function formatInviteSuccessMessage(emailToInvite, options = {}) {
+  const email = String(emailToInvite || '').trim();
+  const target = email ? `至 ${email}` : '';
+  const suffix = '，请检查邮箱并接受 Team 邀请';
+
+  if (options.wasResend) {
+    return `Team 邀请已重新发送${target}${suffix}`;
+  }
+
+  if (options.alreadyPending) {
+    return `该邮箱已有待接受的 Team 邀请${target}${suffix}`;
+  }
+
+  return `Team 邀请已发送${target}${suffix}`;
+}
+
 async function getPuppeteer() {
   if (!puppeteer) {
     puppeteer = require('puppeteer-extra');
@@ -775,7 +791,7 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
           workspaceId,
           workspaceName,
           planType,
-          message: `Invite resent successfully to ${emailToInvite}`,
+          message: formatInviteSuccessMessage(emailToInvite, { wasResend: true }),
         };
       }
 
@@ -802,7 +818,7 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
               workspaceId,
               workspaceName,
               planType,
-              message: `Invite resent successfully to ${emailToInvite}`,
+              message: formatInviteSuccessMessage(emailToInvite, { wasResend: true }),
             };
           }
 
@@ -814,7 +830,7 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
             workspaceId,
             workspaceName,
             planType,
-            message: `Invite already pending for ${emailToInvite}`,
+            message: formatInviteSuccessMessage(emailToInvite, { alreadyPending: true }),
           };
         }
 
@@ -841,8 +857,8 @@ async function sendTeamInvite(account, targetEmail, options = {}) {
         workspaceName,
         planType,
         message: forceResend
-          ? `Invite resent successfully to ${emailToInvite}`
-          : `Invite sent successfully to ${emailToInvite}`,
+          ? formatInviteSuccessMessage(emailToInvite, { wasResend: true })
+          : formatInviteSuccessMessage(emailToInvite),
       };
     }, {
       accessToken: account.access_token,

@@ -10,7 +10,10 @@ const {
 } = require('../services/team-stock');
 const { refreshInventoryInBackground } = require('../services/inventory-sync');
 const { releaseStaleProcessingCdks } = require('../services/cdk-processing-timeout');
-const { reconcileCdkTeamTaskSuccess } = require('../services/cdk-team-task-sync');
+const {
+  reconcileCdkTeamTaskSuccess,
+  localizeTeamInviteSuccessMessage,
+} = require('../services/cdk-team-task-sync');
 
 const router = express.Router();
 
@@ -115,6 +118,23 @@ function parseJsonSafely(value) {
   } catch {
     return null;
   }
+}
+
+function getDisplayTaskStatusMessage(task, inviteResult = null) {
+  const message = task?.status_message || '';
+
+  if (
+    String(task?.task_type || '') === 'team_invite'
+    && normalizeTaskStatus(task?.status) === 'SUCCESS'
+  ) {
+    return localizeTeamInviteSuccessMessage(message, {
+      ...(inviteResult || {}),
+      target_email: task.account_email,
+      account_email: task.account_email,
+    });
+  }
+
+  return message;
 }
 
 function getSubmittedTaskToken(req) {
@@ -827,18 +847,19 @@ router.get('/query/:taskId', (req, res) => {
   }
 
   const publicHost = Boolean(req.isPublicHost);
+  const inviteResult = parseJsonSafely(task.invite_result_json);
 
   res.json({
     code: 200,
     taskStatus: task.status,
     taskType: task.task_type || '',
-    statusMessage: task.status_message,
+    statusMessage: getDisplayTaskStatusMessage(task, inviteResult),
     errorMessage: publicHost && task.status === 'FAILED'
       ? '邀请失败，请联系客服处理'
       : (task.error_message || ''),
     accountEmail: task.account_email,
     cardLast4: publicHost ? '' : task.card_last4,
-    inviteResult: publicHost ? null : parseJsonSafely(task.invite_result_json),
+    inviteResult: publicHost ? null : inviteResult,
     createdAt: task.created_at,
     updatedAt: task.updated_at,
     completedAt: task.completed_at,
@@ -859,7 +880,13 @@ router.get('/tasks', (req, res) => {
     ORDER BY created_at DESC 
     LIMIT ?
     OFFSET ?
-  `).all(limit, offset);
+  `).all(limit, offset).map((task) => {
+    const inviteResult = parseJsonSafely(task.invite_result_json);
+    return {
+      ...task,
+      status_message: getDisplayTaskStatusMessage(task, inviteResult),
+    };
+  });
 
   const total = db.prepare('SELECT COUNT(*) AS count FROM cdk_tasks').get();
 

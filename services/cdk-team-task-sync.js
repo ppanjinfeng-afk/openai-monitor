@@ -19,12 +19,47 @@ function parseJsonSafely(value) {
 
 const completionRetryTimers = new Map();
 
+function buildTeamInviteSuccessMessage(context = {}) {
+  const targetEmail = normalizeText(
+    context.target_email
+    || context.targetEmail
+    || context.email
+    || context.recipient_email
+    || context.recipientEmail
+  );
+  const workspaceName = normalizeText(
+    context.workspace_name
+    || context.workspaceName
+    || context.workspace_id
+    || context.workspaceId
+  );
+  const target = targetEmail ? `至 ${targetEmail}` : '';
+  const workspace = workspaceName ? `（${workspaceName}）` : '';
+
+  return `Team 邀请已发送${target}${workspace}，请检查邮箱并接受邀请`;
+}
+
+function localizeTeamInviteSuccessMessage(message, context = {}) {
+  const text = normalizeText(message);
+  const englishSuccess = /^(team invite sent|invite sent successfully|invite resent successfully|invite already pending)/i;
+
+  if (!text || englishSuccess.test(text)) {
+    return buildTeamInviteSuccessMessage(context);
+  }
+
+  return text.replace(/\s*\(fallback account:\s*([^)]+)\)/i, '（备用账号：$1）');
+}
+
 function buildInviteResultFromInvite(invite = {}) {
   const accountEmail = normalizeText(invite.account_email);
   const workspaceName = normalizeText(invite.workspace_name);
   const workspaceId = normalizeText(invite.workspace_id);
-  const message = normalizeText(invite.message)
-    || `Team invite sent${accountEmail ? ` by ${accountEmail}` : ''}`;
+  const message = localizeTeamInviteSuccessMessage(invite.message, {
+    target_email: invite.target_email,
+    account_email: accountEmail,
+    workspace_name: workspaceName,
+    workspace_id: workspaceId,
+  });
 
   return {
     success: true,
@@ -493,10 +528,13 @@ function completeCdkTeamTask(taskId, inviteResult = {}, options = {}) {
     cdk_task_synced_at: new Date().toISOString(),
   };
   const workspaceName = normalizeText(result.workspace_name || result.workspaceName || result.workspace_id || result.workspaceId);
-  const message = normalizeText(result.message)
-    || (workspaceName
-      ? `Team invite sent, please check email and accept invite (${workspaceName})`
-      : 'Team invite sent, please check email and accept invite');
+  const message = localizeTeamInviteSuccessMessage(result.message, {
+    ...result,
+    target_email: task.account_email,
+    account_email: task.account_email,
+    workspace_name: workspaceName,
+  });
+  result.message = message;
   const resultJson = JSON.stringify(result);
 
   const complete = db.transaction(() => {
@@ -618,5 +656,7 @@ module.exports = {
   reconcileCdkTeamTaskSuccess,
   findSuccessfulInviteForTask,
   buildInviteResultFromInvite,
+  buildTeamInviteSuccessMessage,
+  localizeTeamInviteSuccessMessage,
   bindTaskSourceToWorkspaceRows,
 };
