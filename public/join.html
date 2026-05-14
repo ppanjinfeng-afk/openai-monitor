@@ -79,13 +79,13 @@
       display: inline-flex;
     }
     .wrap {
-      max-width: 1040px;
+      max-width: 1320px;
       margin: 0 auto;
       padding: 20px;
     }
     .hero {
       display: grid;
-      grid-template-columns: minmax(0, 0.88fr) minmax(360px, 1.12fr);
+      grid-template-columns: minmax(280px, 0.84fr) minmax(360px, 1fr) minmax(280px, 0.58fr);
       gap: 20px;
       align-items: stretch;
     }
@@ -176,6 +176,12 @@
       margin: 0 0 18px;
       font-size: 22px;
       letter-spacing: 0;
+    }
+    .cdk-query-panel {
+      align-self: start;
+    }
+    .cdk-query-panel .secondary {
+      width: 100%;
     }
     .field { margin-bottom: 18px; }
     label {
@@ -496,6 +502,21 @@
           <div class="batch-result-list" id="batch-result-list"></div>
         </div>
       </div>
+
+      <aside class="panel cdk-query-panel" aria-label="CDK 查询">
+        <h2>CDK 查询</h2>
+        <div class="field">
+          <label for="cdk-query-input">CDK 卡密</label>
+          <input id="cdk-query-input" type="text" placeholder="TEAM-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
+        </div>
+        <button class="secondary" type="button" id="btn-cdk-query">查询 CDK</button>
+        <div class="message" id="cdk-query-message"></div>
+        <div class="result-card" id="cdk-query-card">
+          <div class="result-row"><span>状态</span><strong id="cdk-query-status">--</strong></div>
+          <div class="result-row"><span>激活邮箱</span><strong id="cdk-query-email">--</strong></div>
+          <div class="result-row"><span>更新时间</span><strong id="cdk-query-updated">--</strong></div>
+        </div>
+      </aside>
     </section>
   </main>
 
@@ -674,6 +695,13 @@
       const batchCard = document.getElementById('batch-card');
       const batchSummary = document.getElementById('batch-summary');
       const batchResultList = document.getElementById('batch-result-list');
+      const cdkQueryInput = document.getElementById('cdk-query-input');
+      const cdkQueryBtn = document.getElementById('btn-cdk-query');
+      const cdkQueryMessage = document.getElementById('cdk-query-message');
+      const cdkQueryCard = document.getElementById('cdk-query-card');
+      const cdkQueryStatus = document.getElementById('cdk-query-status');
+      const cdkQueryEmail = document.getElementById('cdk-query-email');
+      const cdkQueryUpdated = document.getElementById('cdk-query-updated');
 
       let cdkVerified = false;
       let pollTimer = null;
@@ -864,6 +892,52 @@
         document.getElementById('task-state').textContent = state || '--';
       }
 
+      function normalizeCdk(value) {
+        return String(value || '').trim().toUpperCase();
+      }
+
+      function renderCdkLookup(data) {
+        cdkQueryCard.classList.add('show');
+        cdkQueryStatus.textContent = data.statusText || '--';
+        cdkQueryEmail.textContent = data.email || (data.status === 'unused' ? '未使用' : '--');
+        cdkQueryUpdated.textContent = data.updatedAt || data.usedAt || '--';
+      }
+
+      async function lookupCdk() {
+        const cardCode = normalizeCdk(cdkQueryInput?.value);
+        if (cdkQueryInput) {
+          cdkQueryInput.value = cardCode;
+        }
+        cdkQueryCard.classList.remove('show');
+        hideMessage(cdkQueryMessage);
+
+        if (!cardCode) {
+          showMessage(cdkQueryMessage, 'error', '请输入 CDK 卡密');
+          cdkQueryInput?.focus();
+          return;
+        }
+
+        cdkQueryBtn.disabled = true;
+        cdkQueryBtn.textContent = '查询中...';
+        try {
+          const data = await request('/api/cdk/lookup', {
+            method: 'POST',
+            body: JSON.stringify({ cardCode }),
+          });
+          if (!data.found) {
+            showMessage(cdkQueryMessage, 'error', data.msg || '没有查到这个 CDK');
+            return;
+          }
+          renderCdkLookup(data);
+          showMessage(cdkQueryMessage, data.status === 'expired' ? 'error' : 'success', `查询结果：${data.statusText || '--'}`);
+        } catch (err) {
+          showMessage(cdkQueryMessage, 'error', err.message || '查询失败，请稍后重试');
+        } finally {
+          cdkQueryBtn.disabled = false;
+          cdkQueryBtn.textContent = '查询 CDK';
+        }
+      }
+
       function parseBatchColumns(cardText, emailText) {
         const cardLines = String(cardText || '').split(/\r?\n/).map(line => line.trim());
         const emailLines = String(emailText || '').split(/\r?\n/).map(line => line.trim());
@@ -1040,6 +1114,17 @@
 
       verifyBtn.addEventListener('click', () => {
         runVerify().catch(() => {});
+      });
+
+      cdkQueryBtn?.addEventListener('click', () => {
+        lookupCdk().catch(() => {});
+      });
+
+      cdkQueryInput?.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          lookupCdk().catch(() => {});
+        }
       });
 
       cdkInput.addEventListener('input', () => {

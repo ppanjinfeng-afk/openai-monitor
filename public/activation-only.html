@@ -33,14 +33,14 @@
     }
 
     .page {
-      width: min(1160px, calc(100% - 28px));
+      width: min(1320px, calc(100% - 28px));
       margin: 0 auto;
       padding: 16px 0 32px;
     }
 
     .layout {
       display: grid;
-      grid-template-columns: minmax(320px, 0.92fr) minmax(360px, 1.08fr);
+      grid-template-columns: minmax(300px, 0.84fr) minmax(360px, 1fr) minmax(280px, 0.58fr);
       gap: 24px;
       align-items: start;
     }
@@ -155,6 +155,10 @@
       font-size: 30px;
       line-height: 1;
       letter-spacing: -0.02em;
+    }
+
+    .query-panel .btn {
+      width: 100%;
     }
 
     .tabs {
@@ -471,6 +475,21 @@
           </div>
         </div>
       </section>
+
+      <aside class="panel query-panel" aria-label="CDK 查询">
+        <h2>CDK 查询</h2>
+        <div class="field">
+          <label for="query-cdk">CDK 卡密</label>
+          <input id="query-cdk" type="text" placeholder="TEAM-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
+        </div>
+        <button class="btn secondary" id="query-btn" type="button">查询 CDK</button>
+        <div class="message" id="query-message"></div>
+        <div class="task-card" id="query-card">
+          <div class="task-row"><span>状态</span><strong id="query-status">-</strong></div>
+          <div class="task-row"><span>激活邮箱</span><strong id="query-email">-</strong></div>
+          <div class="task-row"><span>更新时间</span><strong id="query-updated">-</strong></div>
+        </div>
+      </aside>
     </section>
   </main>
 
@@ -498,6 +517,13 @@
     const batchMessage = document.getElementById('batch-message');
     const batchResults = document.getElementById('batch-results');
     const batchList = document.getElementById('batch-list');
+    const queryCdk = document.getElementById('query-cdk');
+    const queryBtn = document.getElementById('query-btn');
+    const queryMessage = document.getElementById('query-message');
+    const queryCard = document.getElementById('query-card');
+    const queryStatus = document.getElementById('query-status');
+    const queryEmail = document.getElementById('query-email');
+    const queryUpdated = document.getElementById('query-updated');
     const pollTimers = new Map();
 
     function normalizeCdk(value) {
@@ -543,6 +569,46 @@
         throw new Error(data.msg || data.error || '请求失败，请稍后重试');
       }
       return data;
+    }
+
+    function renderCdkLookup(data) {
+      queryCard.classList.add('show');
+      queryStatus.textContent = data.statusText || '-';
+      queryEmail.textContent = data.email || (data.status === 'unused' ? '未使用' : '-');
+      queryUpdated.textContent = data.updatedAt || data.usedAt || '-';
+    }
+
+    async function lookupCdk() {
+      const cardCode = normalizeCdk(queryCdk.value);
+      queryCdk.value = cardCode;
+      queryCard.classList.remove('show');
+      clearMessage(queryMessage);
+
+      if (!cardCode) {
+        setMessage(queryMessage, 'error', '请输入 CDK 卡密');
+        queryCdk.focus();
+        return;
+      }
+
+      queryBtn.disabled = true;
+      queryBtn.textContent = '查询中...';
+      try {
+        const data = await request('/api/cdk/lookup', {
+          method: 'POST',
+          body: JSON.stringify({ cardCode }),
+        });
+        if (!data.found) {
+          setMessage(queryMessage, 'error', data.msg || '没有查到这个 CDK');
+          return;
+        }
+        renderCdkLookup(data);
+        setMessage(queryMessage, data.status === 'expired' ? 'error' : 'success', `查询结果：${data.statusText || '-'}`);
+      } catch (err) {
+        setMessage(queryMessage, 'error', err.message || '查询失败，请稍后重试');
+      } finally {
+        queryBtn.disabled = false;
+        queryBtn.textContent = '查询 CDK';
+      }
     }
 
     function fillQueryDefaults() {
@@ -829,6 +895,15 @@
     singleForm.addEventListener('submit', submitSingle);
     batchVerifyBtn.addEventListener('click', verifyBatch);
     batchForm.addEventListener('submit', submitBatch);
+    queryBtn.addEventListener('click', () => {
+      lookupCdk().catch(() => {});
+    });
+    queryCdk.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        lookupCdk().catch(() => {});
+      }
+    });
     fillQueryDefaults();
   </script>
 </body>

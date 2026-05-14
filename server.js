@@ -446,6 +446,10 @@ function getPublicRateLimit(req) {
     return { windowMs: 10 * 60 * 1000, max: 5 };
   }
 
+  if (req.method === 'POST' && pathOnly === '/api/cdk/lookup') {
+    return { windowMs: 5 * 60 * 1000, max: 60 };
+  }
+
   if (req.method === 'POST' && (
     pathOnly === '/api/payments/alipay/notify'
     || pathOnly === '/api/payments/alipay/notify/'
@@ -528,6 +532,10 @@ function isAllowedActivationOnlyPublicRequest(req) {
     return true;
   }
 
+  if (req.method === 'POST' && pathOnly === '/api/cdk/lookup') {
+    return true;
+  }
+
   if (isReadMethod && /^\/api\/cdk\/query\/[^/]+$/.test(pathOnly)) {
     return true;
   }
@@ -595,6 +603,10 @@ function isAllowedPublicRequest(req) {
   }
 
   if (req.method === 'POST' && pathOnly === '/api/cdk/submit-team-batch') {
+    return true;
+  }
+
+  if (req.method === 'POST' && pathOnly === '/api/cdk/lookup') {
     return true;
   }
 

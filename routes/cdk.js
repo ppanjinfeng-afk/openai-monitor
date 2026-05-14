@@ -230,6 +230,126 @@ function getTeamInventoryPayloadSafely(card, context) {
   }
 }
 
+function normalizeCdkCode(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function getCdkStatusText(status) {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (normalized === 'unused') return '未使用';
+  if (normalized === 'used') return '使用';
+  if (normalized === 'expired') return '过期';
+  if (normalized === 'processing') return '处理中';
+  return normalized ? normalized : '未知';
+}
+
+function pickFirstEmail(values) {
+  for (const value of values) {
+    const email = normalizeEmail(value);
+    if (isValidEmail(email)) {
+      return email;
+    }
+  }
+  return '';
+}
+
+function findCdkRelatedEmail(card, tasks = {}) {
+  const cdkId = Number(card?.id || 0);
+  const cdkCode = normalizeCdkCode(card?.code);
+  const taskIds = [
+    tasks.successTask?.id,
+    tasks.activeTask?.id,
+    tasks.latestTask?.id,
+  ].map(id => String(id || '').trim()).filter(Boolean);
+  const taskId = taskIds[0] || '';
+  const params = { cdkId, cdkCode, taskId };
+
+  const member = db.prepare(`
+    SELECT email
+    FROM workspace_members
+    WHERE COALESCE(email, '') != ''
+      AND (
+        (@cdkId > 0 AND source_cdk_id = @cdkId)
+        OR (@cdkCode != '' AND UPPER(TRIM(COALESCE(source_cdk_code, ''))) = @cdkCode)
+        OR (@taskId != '' AND source_cdk_task_id = @taskId)
+      )
+    ORDER BY datetime(COALESCE(NULLIF(joined_at, ''), NULLIF(last_synced_at, ''), '1970-01-01 00:00:00')) DESC,
+             id DESC
+    LIMIT 1
+  `).get(params);
+
+  const pendingInvite = db.prepare(`
+    SELECT email
+    FROM workspace_pending_invites
+    WHERE COALESCE(email, '') != ''
+      AND (
+        (@cdkId > 0 AND source_cdk_id = @cdkId)
+        OR (@cdkCode != '' AND UPPER(TRIM(COALESCE(source_cdk_code, ''))) = @cdkCode)
+        OR (@taskId != '' AND source_cdk_task_id = @taskId)
+      )
+    ORDER BY datetime(COALESCE(NULLIF(invited_at, ''), NULLIF(last_synced_at, ''), '1970-01-01 00:00:00')) DESC,
+             id DESC
+    LIMIT 1
+  `).get(params);
+
+  const invite = db.prepare(`
+    SELECT target_email
+    FROM invites
+    WHERE COALESCE(target_email, '') != ''
+      AND (
+        (@taskId != '' AND cdk_task_id = @taskId)
+        OR cdk_task_id IN (
+          SELECT id
+          FROM cdk_tasks
+          WHERE (@cdkId > 0 AND cdk_id = @cdkId)
+             OR (@cdkCode != '' AND UPPER(TRIM(COALESCE(cdk_code, ''))) = @cdkCode)
+        )
+      )
+    ORDER BY datetime(COALESCE(NULLIF(updated_at, ''), created_at)) DESC,
+             id DESC
+    LIMIT 1
+  `).get(params);
+
+  return pickFirstEmail([
+    card?.assigned_email,
+    member?.email,
+    pendingInvite?.email,
+    invite?.target_email,
+    tasks.successTask?.account_email,
+    tasks.activeTask?.account_email,
+    tasks.latestTask?.account_email,
+  ]);
+}
+
+function buildCdkLookupPayload(card) {
+  const successTask = getSuccessfulTeamTaskForCard(card.id);
+  const activeTask = getActiveTeamTaskForCard(card.id);
+  const latestTask = getLatestTeamTaskForCard(card.id);
+  const rawStatus = String(card.status || '').trim().toLowerCase();
+  let status = rawStatus || 'unknown';
+
+  if (rawStatus !== 'expired' && successTask) {
+    status = 'used';
+  } else if (rawStatus !== 'expired' && rawStatus !== 'used' && activeTask) {
+    status = 'processing';
+  }
+
+  const email = findCdkRelatedEmail(card, { successTask, activeTask, latestTask });
+  const task = successTask || activeTask || latestTask || null;
+
+  return {
+    found: true,
+    cdkCode: card.code,
+    status,
+    statusText: getCdkStatusText(status),
+    email,
+    taskStatus: task?.status || '',
+    taskId: task?.id || '',
+    usedAt: card.used_at || '',
+    updatedAt: card.updated_at || '',
+  };
+}
+
 function createTeamInviteTask(cardCodeInput, emailInput) {
   const cardCode = String(cardCodeInput || '').trim().toUpperCase();
   const email = normalizeEmail(emailInput);
@@ -829,6 +949,37 @@ router.post('/submit-team-batch', async (req, res) => {
     failCount: errors.length,
     tasks,
     errors,
+  });
+});
+
+router.post('/lookup', (req, res) => {
+  runCdkMaintenanceSafely('lookup');
+
+  const cardCode = normalizeCdkCode(req.body.cardCode || req.body.cdk || req.body.code);
+  if (!cardCode || cardCode.length < 8) {
+    return res.status(400).json({
+      code: 400,
+      found: false,
+      status: 'invalid',
+      statusText: '格式错误',
+      msg: '请输入完整 CDK 卡密',
+    });
+  }
+
+  const card = db.prepare('SELECT * FROM cdk_cards WHERE code = ?').get(cardCode);
+  if (!card) {
+    return res.json({
+      code: 200,
+      found: false,
+      status: 'not_found',
+      statusText: '不存在',
+      msg: '没有查到这个 CDK',
+    });
+  }
+
+  return res.json({
+    code: 200,
+    ...buildCdkLookupPayload(card),
   });
 });
 
