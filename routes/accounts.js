@@ -775,7 +775,8 @@ function applyStatusFilter(conditions, params, status) {
 
 function applyAccountsVisibilityFilter(conditions, options = {}) {
   const hasSearch = String(options.search || '').trim().length > 0;
-  if (hasSearch) {
+  const status = String(options.status || '').trim();
+  if (hasSearch || status === 'invalid_credentials') {
     return;
   }
 
@@ -2055,7 +2056,7 @@ router.get('/', (req, res) => {
   const conditions = [];
   const params = [];
 
-  applyAccountsVisibilityFilter(conditions, { search });
+  applyAccountsVisibilityFilter(conditions, { search, status });
   applyStatusFilter(conditions, params, status);
   if (search) {
     conditions.push('(email LIKE ? OR label LIKE ?)');
