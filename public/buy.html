@@ -49,6 +49,12 @@
       flex-wrap: wrap;
       gap: 14px;
     }
+    .contact-stack {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+    }
     .qq-contact-popover {
       display: none;
       align-items: center;
@@ -67,6 +73,41 @@
     }
     .qq-contact-popover.show {
       display: inline-flex;
+    }
+    .agent-page-popover {
+      display: none;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 38px;
+      padding: 8px 10px;
+      border: 1px solid #d8e3ff;
+      border-radius: 10px;
+      background: #ffffff;
+      color: #13253f;
+      box-shadow: 0 12px 28px rgba(19, 37, 63, 0.12);
+    }
+    .agent-page-popover.show {
+      display: grid;
+    }
+    .agent-page-popover code {
+      color: #13253f;
+      font-size: 13px;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+    .agent-page-popover button {
+      min-height: 30px;
+      padding: 0 10px;
+      border-radius: 8px;
+      border: 1px solid #d6e0ee;
+      background: #edf3fb;
+      color: #214066;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      white-space: nowrap;
     }
     .wrap {
       max-width: 1120px;
@@ -1771,7 +1812,10 @@
     <nav class="nav-links" aria-label="页面导航">
       <a class="link" href="/join">已有 CDK，去激活</a>
       <a class="link" href="https://t.me/ZC_PJF" target="_blank" rel="noopener">TG 联系</a>
-      <a class="link" href="https://wpa.qq.com/msgrd?v=3&amp;uin=1006267937&amp;site=qq&amp;menu=yes" target="_blank" rel="noopener">QQ 联系</a>
+      <span class="contact-stack">
+        <a class="link" href="https://wpa.qq.com/msgrd?v=3&amp;uin=1006267937&amp;site=qq&amp;menu=yes" target="_blank" rel="noopener">QQ 联系</a>
+        <a class="link" id="agent-page-link" href="#">代理激活页面</a>
+      </span>
     </nav>
   </header>
 
@@ -2746,6 +2790,50 @@
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
           hideQqContact();
+        }
+      });
+    }
+
+    const agentPageLink = document.getElementById('agent-page-link');
+    if (agentPageLink) {
+      const agentPageUrl = 'https://www.panqda.com';
+      const agentPagePopover = document.createElement('span');
+      agentPagePopover.className = 'agent-page-popover';
+      agentPagePopover.innerHTML = `
+        <code>${escapeHtml(agentPageUrl)}</code>
+        <button type="button">复制</button>
+      `;
+      agentPageLink.insertAdjacentElement('afterend', agentPagePopover);
+
+      const agentCopyBtn = agentPagePopover.querySelector('button');
+      const hideAgentPage = () => {
+        agentPagePopover.classList.remove('show');
+      };
+
+      agentPageLink.addEventListener('click', (event) => {
+        event.preventDefault();
+        agentPagePopover.classList.toggle('show');
+      });
+
+      agentCopyBtn?.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const copied = await copyText(agentPageUrl);
+        agentCopyBtn.textContent = copied ? '已复制' : '复制失败';
+        setTimeout(() => {
+          agentCopyBtn.textContent = '复制';
+        }, 1400);
+      });
+
+      document.addEventListener('click', (event) => {
+        if (event.target !== agentPageLink && !agentPagePopover.contains(event.target)) {
+          hideAgentPage();
+        }
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          hideAgentPage();
         }
       });
     }
